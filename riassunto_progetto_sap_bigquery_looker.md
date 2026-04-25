@@ -1821,3 +1821,24 @@ Implementazione:
   - aggiunta sezione build installer `.exe`
 - file: `docs\installer_windows.md`
   - guida operativa build/install/verifica/troubleshooting installer
+
+### 2026-04-25 - Trasferimento su repository GitHub
+
+Obiettivo:
+
+- versionare il progetto Esyy B1Connector su repository remoto dedicato.
+
+Attivita eseguite:
+
+1) Verifica repository locale
+- path progetto usato: `C:\Esyy Suite\esyy-B1Connector`
+- branch locale: `main`
+- commit iniziale presente: `6c9438b` (`Initial import: Esyy B1Connector app, docs, scripts, installer`)
+
+2) Push su GitHub
+- remote: `https://github.com/eimnos/esyy-B1Conector.git`
+- push eseguito con: `git push -u origin HEAD:main`
+- tracking impostato: `main -> origin/main`
+
+3) Verifica remota
+- head remoto confermato: `refs/heads/main -> 6c9438b81a50d07741e185960b7e8c13b1f3452d`
