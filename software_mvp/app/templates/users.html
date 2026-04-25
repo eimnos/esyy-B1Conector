@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Nuovo utente</h2>
+  <form method="post" action="/ui/users/create">
+    <div class="row">
+      <div>
+        <label>Username</label>
+        <input type="text" name="username" required>
+      </div>
+      <div>
+        <label>Password iniziale</label>
+        <input type="text" name="password" required>
+      </div>
+      <div>
+        <label>Ruolo</label>
+        <select name="role">
+          {% for role in roles %}
+            <option value="{{ role }}">{{ role }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_active" checked>
+        <label>Attivo</label>
+      </div>
+    </div>
+    <button class="btn primary" type="submit">Crea utente</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Utenti applicazione</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Ruolo</th>
+        <th>Attivo</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in rows %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}{% if current_user_id == u.id %} <strong>(tu)</strong>{% endif %}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ 'SI' if u.is_active else 'NO' }}</td>
+        <td class="actions">
+          <form method="post" action="/ui/users/{{ u.id }}/update" style="display:block;margin-bottom:6px;">
+            <input type="text" name="username" value="{{ u.username }}" style="width:180px;">
+            <select name="role" style="width:110px;">
+              {% for role in roles %}
+                <option value="{{ role }}" {% if u.role == role %}selected{% endif %}>{{ role }}</option>
+              {% endfor %}
+            </select>
+            <label class="inline-check">
+              <input type="checkbox" class="toggle-input toggle-input-sm" name="is_active" {% if u.is_active %}checked{% endif %}> attivo
+            </label>
+            <button class="btn secondary" type="submit">Aggiorna</button>
+          </form>
+          <form method="post" action="/ui/users/{{ u.id }}/password" style="display:block;margin-bottom:6px;">
+            <input type="text" name="new_password" placeholder="Nuova password" style="width:180px;">
+            <button class="btn secondary" type="submit">Reset password</button>
+          </form>
+          {% if current_user_id != u.id %}
+          <form method="post" action="/ui/users/{{ u.id }}/delete" onsubmit="return confirm('Eliminare utente?')">
+            <button class="btn danger" type="submit">Elimina</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">Nessun utente configurato.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

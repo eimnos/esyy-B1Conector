@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Pipeline #{{ row.id }} - {{ row.name }}</h2>
+  <form method="post" action="/ui/pipelines/{{ row.id }}/update">
+    <div class="row">
+      <div>
+        <label class="field-label">
+          Tenant code
+          <span class="hint" title="Usa tenant diversi per separare configurazioni tra clienti o ambienti.">?</span>
+        </label>
+        <input type="text" name="tenant_code" value="{{ row.tenant_code }}">
+      </div>
+      <div>
+        <label class="field-label">
+          Nome pipeline
+          <span class="hint" title="Nome operativo del flusso.">?</span>
+        </label>
+        <input type="text" name="name" value="{{ row.name }}">
+      </div>
+      <div>
+        <label class="field-label">
+          View sorgente
+          <span class="hint" title="Obbligatoria per modalita managed (command vuoto).">?</span>
+        </label>
+        <select name="source_view_id">
+          <option value="">-- nessuna --</option>
+          {% for v in views %}
+            <option value="{{ v.id }}" {% if row.source_view_id == v.id %}selected{% endif %}>
+              {{ v.id }} - {{ v.schema_name }}.{{ v.view_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_active" {% if row.is_active %}checked{% endif %}>
+        <label>Attiva</label>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label class="field-label">
+          BigQuery dataset
+          <span class="hint" title="Dataset di destinazione in BigQuery.">?</span>
+        </label>
+        <input type="text" name="bq_dataset" value="{{ row.bq_dataset }}">
+      </div>
+      <div>
+        <label class="field-label">
+          BigQuery table
+          <span class="hint" title="Tabella di destinazione in BigQuery.">?</span>
+        </label>
+        <input type="text" name="bq_table" value="{{ row.bq_table }}">
+      </div>
+      <div>
+        <label class="field-label">
+          Write mode
+          <span class="hint" title="WRITE_TRUNCATE sostituisce i dati, WRITE_APPEND li accoda, WRITE_EMPTY fallisce se la tabella non e vuota.">?</span>
+        </label>
+        <select name="write_mode">
+          <option value="WRITE_TRUNCATE" {% if row.write_mode == 'WRITE_TRUNCATE' %}selected{% endif %}>WRITE_TRUNCATE</option>
+          <option value="WRITE_APPEND" {% if row.write_mode == 'WRITE_APPEND' %}selected{% endif %}>WRITE_APPEND</option>
+          <option value="WRITE_EMPTY" {% if row.write_mode == 'WRITE_EMPTY' %}selected{% endif %}>WRITE_EMPTY</option>
+        </select>
+      </div>
+    </div>
+    <div>
+      <label class="field-label">
+        Command (opzionale)
+        <span class="hint" title="Lascia vuoto per usare modalita managed: SQL view -> BigQuery.">?</span>
+      </label>
+      <textarea name="command">{{ row.command or '' }}</textarea>
+      <p class="muted">Se vuoto, il run usa la modalita managed: legge la query della view sorgente e carica su BigQuery.</p>
+    </div>
+    <button class="btn primary" type="submit">Salva modifiche</button>
+    <a class="btn secondary" href="/ui/pipelines">Torna elenco</a>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Esecuzione manuale</h2>
+  <form method="post" action="/ui/pipelines/{{ row.id }}/run">
+    <button class="btn primary" type="submit">Esegui pipeline ora</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Ultimi run</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Ended</th>
+        <th>Messaggio</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.started_at }}</td>
+        <td>{{ r.ended_at }}</td>
+        <td><pre style="margin:0;white-space:pre-wrap">{{ r.message or '' }}</pre></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">Nessun run presente.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

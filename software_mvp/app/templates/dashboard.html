@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Stato generale</h2>
+  <div class="grid">
+    <div class="card"><div class="label">Views</div><div class="value">{{ stats.views }}</div></div>
+    <div class="card"><div class="label">Pipelines</div><div class="value">{{ stats.pipelines }}</div></div>
+    <div class="card"><div class="label">Schedules</div><div class="value">{{ stats.schedules }}</div></div>
+    <div class="card"><div class="label">ACL Rules</div><div class="value">{{ stats.acl_rules }}</div></div>
+    <div class="card"><div class="label">Run Logs</div><div class="value">{{ stats.run_logs }}</div></div>
+  </div>
+  <div class="muted">Gestione operativa da menu: Views, Pipelines, Schedules, ACL.</div>
+</div>
+
+<div class="section">
+  <h2>Ultimi run pipeline</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Pipeline</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Ended</th>
+        <th>Messaggio</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recent_runs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          {% if pipeline_by_id.get(r.pipeline_id) %}
+            <a href="/ui/pipelines/{{ r.pipeline_id }}">{{ pipeline_by_id.get(r.pipeline_id).name }}</a>
+          {% else %}
+            #{{ r.pipeline_id }}
+          {% endif %}
+        </td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.started_at }}</td>
+        <td>{{ r.ended_at }}</td>
+        <td><pre style="margin:0;white-space:pre-wrap">{{ r.message or '' }}</pre></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Nessun run disponibile.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

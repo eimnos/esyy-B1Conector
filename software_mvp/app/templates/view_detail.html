@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>View #{{ row.id }} - {{ row.schema_name }}.{{ row.view_name }}</h2>
+  <form method="post" action="/ui/views/{{ row.id }}/update" data-sql-builder>
+    <div class="row">
+      <div>
+        <label class="field-label">
+          Tenant code
+          <span class="hint" title="Usa un tenant per separare clienti o ambienti (es. default, produzione, test).">?</span>
+        </label>
+        <input type="text" name="tenant_code" value="{{ row.tenant_code }}">
+      </div>
+      <div>
+        <label class="field-label">
+          Schema
+          <span class="hint" title="Schema SQL Server in cui la view viene pubblicata.">?</span>
+        </label>
+        <input type="text" name="schema_name" value="{{ row.schema_name }}">
+      </div>
+      <div>
+        <label class="field-label">
+          Nome view
+          <span class="hint" title="Evita spazi e caratteri speciali.">?</span>
+        </label>
+        <input type="text" name="view_name" value="{{ row.view_name }}">
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_active" {% if row.is_active %}checked{% endif %}>
+        <label>Attiva</label>
+      </div>
+    </div>
+    <div>
+      <label class="field-label">
+        SELECT SQL
+        <span class="hint" title="Query SQL Server/HANA usata sia per publish sia per pipeline managed.">?</span>
+      </label>
+      <div class="query-builder" data-query-builder>
+        <aside class="qb-sidebar">
+          <div class="qb-sidebar-head">
+            <strong>Catalogo DB</strong>
+            <span class="qb-chip" data-qb-engine>...</span>
+          </div>
+          <div class="qb-search">
+            <input type="text" placeholder="Cerca tabella/view..." data-qb-search list="qb-search-suggestions">
+            <datalist id="qb-search-suggestions" data-qb-search-suggestions></datalist>
+            <button type="button" class="btn secondary btn-xs" data-qb-search-btn>Cerca</button>
+            <button type="button" class="btn secondary btn-xs" data-qb-refresh>Ricarica</button>
+          </div>
+          <div class="field-help" data-qb-status>Nessun catalogo caricato. La ricerca e inline mentre digiti.</div>
+          <div class="qb-list-box" data-qb-objects></div>
+
+          <div class="qb-divider"></div>
+          <div class="qb-selected-title">Oggetto selezionato</div>
+          <div class="field-help" data-qb-selected-object>Nessuna tabella selezionata.</div>
+          <div class="qb-inline-actions">
+            <button type="button" class="btn secondary btn-xs" data-qb-set-base>Imposta FROM</button>
+            <button type="button" class="btn secondary btn-xs" data-qb-use-join>Prepara JOIN</button>
+          </div>
+          <div class="qb-list-box qb-columns-box" data-qb-selected-columns></div>
+          <button type="button" class="btn secondary btn-xs" data-qb-add-columns>Aggiungi campi selezionati</button>
+          <div class="field-help" data-qb-error></div>
+        </aside>
+
+        <div class="qb-main">
+          <div class="qb-block">
+            <h3>Struttura Query</h3>
+            <div class="row qb-row">
+              <div>
+                <label>TOP / LIMIT (opzionale)</label>
+                <input type="text" data-qb-row-limit placeholder="es. 1000">
+                <p class="field-help">Su SQL Server genera TOP, su HANA genera LIMIT.</p>
+              </div>
+              <div>
+                <label>FROM corrente</label>
+                <input type="text" data-qb-base-display readonly placeholder="Imposta una tabella base dal catalogo">
+              </div>
+            </div>
+          </div>
+
+          <div class="qb-block">
+            <h3>JOIN guidato</h3>
+            <div class="row qb-row">
+              <div>
+                <label>Tabella JOIN</label>
+                <input type="text" data-qb-join-target readonly placeholder="Seleziona tabella e clicca 'Prepara JOIN'">
+              </div>
+              <div>
+                <label>Join type</label>
+                <select data-qb-join-type>
+                  <option value="INNER JOIN">INNER JOIN</option>
+                  <option value="LEFT JOIN">LEFT JOIN</option>
+                  <option value="RIGHT JOIN">RIGHT JOIN</option>
+                </select>
+              </div>
+            </div>
+            <div class="row qb-row">
+              <div>
+                <label>Campo sinistro</label>
+                <select data-qb-join-left></select>
+              </div>
+              <div>
+                <label>Operatore</label>
+                <select data-qb-join-operator>
+                  <option value="=">=</option>
+                  <option value="<>">&lt;&gt;</option>
+                </select>
+              </div>
+              <div>
+                <label>Campo destro</label>
+                <select data-qb-join-right></select>
+              </div>
+            </div>
+            <button type="button" class="btn secondary btn-xs" data-qb-add-join>Aggiungi JOIN</button>
+            <div class="qb-list-box" data-qb-joins></div>
+          </div>
+
+          <div class="qb-block">
+            <h3>WHERE guidato</h3>
+            <div class="row qb-row">
+              <div>
+                <label>Connettore</label>
+                <select data-qb-filter-logic>
+                  <option value="AND">AND</option>
+                  <option value="OR">OR</option>
+                </select>
+              </div>
+              <div>
+                <label>Campo</label>
+                <select data-qb-filter-field></select>
+              </div>
+              <div>
+                <label>Operatore</label>
+                <select data-qb-filter-operator>
+                  <option value="=">=</option>
+                  <option value="<>">&lt;&gt;</option>
+                  <option value=">">&gt;</option>
+                  <option value="<">&lt;</option>
+                  <option value=">=">&gt;=</option>
+                  <option value="<=">&lt;=</option>
+                  <option value="LIKE">LIKE</option>
+                  <option value="IN">IN</option>
+                  <option value="IS NULL">IS NULL</option>
+                  <option value="IS NOT NULL">IS NOT NULL</option>
+                </select>
+              </div>
+            </div>
+            <div class="row qb-row">
+              <div>
+                <label>Tipo valore</label>
+                <select data-qb-filter-value-type>
+                  <option value="string">Testo</option>
+                  <option value="number">Numero</option>
+                  <option value="date">Data (YYYY-MM-DD)</option>
+                  <option value="raw">Raw SQL</option>
+                </select>
+              </div>
+              <div>
+                <label>Valore</label>
+                <input type="text" data-qb-filter-value placeholder="es. C0001 oppure 2026-01-01">
+              </div>
+            </div>
+            <button type="button" class="btn secondary btn-xs" data-qb-add-filter>Aggiungi filtro</button>
+            <div class="qb-list-box" data-qb-filters></div>
+          </div>
+
+          <div class="qb-block">
+            <h3>Campi SELECT</h3>
+            <div class="qb-list-box" data-qb-fields></div>
+            <button type="button" class="btn secondary btn-xs" data-qb-clear-fields>Pulisci campi</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-toolbar">
+        <button type="button" class="btn secondary btn-xs" data-sql-template="basic">Template base</button>
+        <button type="button" class="btn secondary btn-xs" data-sql-template="date_range">Template con date</button>
+        <button type="button" class="btn secondary btn-xs" data-sql-template="join">Template con join</button>
+        <button type="button" class="btn secondary btn-xs" data-qb-generate>Rigenera SQL dal builder</button>
+      </div>
+      <textarea name="select_sql" class="sql-editor" data-sql-editor>{{ row.select_sql }}</textarea>
+      <p class="field-help">
+        Usa il builder guidato per comporre query standard. Per query avanzate puoi intervenire manualmente sull'SQL.
+      </p>
+    </div>
+    <button class="btn primary" type="submit">Salva modifiche</button>
+    <a class="btn secondary" href="/ui/views">Torna elenco</a>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Deploy SQL Server</h2>
+  <p class="muted">Versione corrente: {{ row.version }} | Ultima publish: {{ row.last_published_at or 'mai' }}</p>
+  <form method="post" action="/ui/views/{{ row.id }}/publish">
+    <button class="btn primary" type="submit">Pubblica su SQL Server</button>
+  </form>
+</div>
+{% endblock %}

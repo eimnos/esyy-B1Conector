@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Crea schedule</h2>
+  <form method="post" action="/ui/schedules/create">
+    <div class="row">
+      <div>
+        <label class="field-label">
+          Pipeline
+          <span class="hint" title="Seleziona la pipeline da eseguire automaticamente.">?</span>
+        </label>
+        <select name="pipeline_id" required>
+          {% for p in pipelines %}
+            <option value="{{ p.id }}">{{ p.id }} - {{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="field-help">La schedule avviera questa pipeline con il cron indicato.</p>
+      </div>
+      <div>
+        <label class="field-label">
+          Cron (5 campi)
+          <span class="hint" title="Formato: minuto ora giorno-del-mese mese giorno-della-settimana.">?</span>
+        </label>
+        <input type="text" name="cron_expression" value="0 * * * *" required>
+        <p class="field-help">Esempi: <code>0 * * * *</code> (ogni ora), <code>0 7 * * 1-5</code> (7:00 lun-ven).</p>
+        <div class="cron-builder" data-cron-builder data-cron-target="cron_expression">
+          <div class="row" style="margin-bottom:6px;">
+            <div>
+              <label>Modalita builder</label>
+              <select data-cron-mode>
+                <option value="every_n_minutes">Ogni N minuti</option>
+                <option value="hourly">Ogni ora (minuto fisso)</option>
+                <option value="daily">Ogni giorno (ora/minuto)</option>
+                <option value="weekly">Ogni settimana (giorno+ora)</option>
+                <option value="monthly">Ogni mese (giorno+ora)</option>
+              </select>
+            </div>
+            <div data-cron-group data-mode="every_n_minutes">
+              <label>Intervallo minuti (N)</label>
+              <input type="number" min="1" max="59" step="1" value="30" data-cron-every>
+            </div>
+            <div data-cron-group data-mode="hourly,daily,weekly,monthly">
+              <label>Minuto</label>
+              <input type="number" min="0" max="59" step="1" value="0" data-cron-minute>
+            </div>
+            <div data-cron-group data-mode="daily,weekly,monthly">
+              <label>Ora</label>
+              <input type="number" min="0" max="23" step="1" value="7" data-cron-hour>
+            </div>
+            <div data-cron-group data-mode="weekly">
+              <label>Giorno settimana</label>
+              <select data-cron-weekday>
+                <option value="1">Lunedi</option>
+                <option value="2">Martedi</option>
+                <option value="3">Mercoledi</option>
+                <option value="4">Giovedi</option>
+                <option value="5">Venerdi</option>
+                <option value="6">Sabato</option>
+                <option value="0">Domenica</option>
+              </select>
+            </div>
+            <div data-cron-group data-mode="monthly">
+              <label>Giorno mese</label>
+              <input type="number" min="1" max="31" step="1" value="1" data-cron-monthday>
+            </div>
+          </div>
+          <div class="qb-inline-actions">
+            <button type="button" class="btn secondary btn-xs" data-cron-generate>Genera cron</button>
+            <span class="field-help" data-cron-preview></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="field-label">
+          Timezone
+          <span class="hint" title="Timezone usata per interpretare il cron.">?</span>
+        </label>
+        <select name="timezone">
+          {% for tz in timezone_options %}
+            <option value="{{ tz }}" {% if tz == 'Europe/Rome' %}selected{% endif %}>{{ tz }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_active" checked>
+        <label>Attiva</label>
+      </div>
+    </div>
+    <button class="btn primary" type="submit">Crea schedule</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Schedules attuali</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Pipeline</th>
+        <th>Cron</th>
+        <th>Timezone</th>
+        <th>Attiva</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          {% if pipeline_by_id.get(r.pipeline_id) %}
+            {{ pipeline_by_id.get(r.pipeline_id).name }} (#{{ r.pipeline_id }})
+          {% else %}
+            #{{ r.pipeline_id }}
+          {% endif %}
+        </td>
+        <td>{{ r.cron_expression }}</td>
+        <td>{{ r.timezone }}</td>
+        <td>{{ 'SI' if r.is_active else 'NO' }}</td>
+        <td class="actions">
+          <form method="post" action="/ui/schedules/{{ r.id }}/update" class="inline-form">
+            <input type="text" name="cron_expression" value="{{ r.cron_expression }}" class="inline-sm" title="Espressione cron a 5 campi">
+            <select name="timezone" class="inline-md" title="Timezone schedule">
+              {% for tz in timezone_options %}
+                <option value="{{ tz }}" {% if r.timezone == tz %}selected{% endif %}>{{ tz }}</option>
+              {% endfor %}
+            </select>
+            <label class="inline-check">
+              <input type="checkbox" class="toggle-input toggle-input-sm" name="is_active" {% if r.is_active %}checked{% endif %}> attiva
+            </label>
+            <button class="btn secondary" type="submit">Aggiorna</button>
+          </form>
+          <form method="post" action="/ui/schedules/{{ r.id }}/delete" onsubmit="return confirm('Eliminare schedule?')">
+            <button class="btn danger" type="submit">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Nessuna schedule configurata.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

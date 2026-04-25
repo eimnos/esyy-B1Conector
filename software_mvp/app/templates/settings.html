@@ -1,0 +1,353 @@
+﻿{% extends "base.html" %}
+{% block body %}
+{% set db_form_locked = '1' if (sqlserver_conn_str or hana_conn_str) else '0' %}
+<div class="section">
+  <h2>Settings - Configurazione Guidata</h2>
+  <p class="muted">
+    Wizard compatti per ridurre confusione. Procedi in sequenza: DB sorgente -> attivazione BigQuery -> setup BigQuery.
+  </p>
+</div>
+
+<div class="wizard-stack">
+  <details class="wizard-card">
+    <summary>
+      <span class="wizard-step">1</span>
+      <div>
+        <div class="wizard-title">Database Sorgente (SQL Server / HANA)</div>
+        <div class="wizard-sub">Una sola connessione attiva per volta in base all'engine selezionato.</div>
+      </div>
+    </summary>
+    <div class="wizard-body">
+      {% if message_scope == 'db' and message %}
+        <div class="msg ok" style="margin-bottom:10px;">{{ message }}</div>
+      {% endif %}
+      {% if error_scope == 'db' and error %}
+        <div class="msg err" style="margin-bottom:10px;">{{ error }}</div>
+      {% endif %}
+
+      <div class="wizard-tip">
+        <strong>Connessione attiva:</strong> {{ active_conn_label }}
+      </div>
+      <label>Stringa attiva (read-only)</label>
+      <textarea readonly style="min-height:90px;">{{ active_conn_value or '' }}</textarea>
+
+      <form method="post" action="/ui/settings/db/wizard/apply" data-lock-form data-start-locked="{{ db_form_locked }}" style="margin-top:12px;">
+        <fieldset data-lock-fieldset>
+          <div class="row">
+            <div>
+              <label class="field-label">
+                Database engine attivo
+                <span class="hint" title="L'engine scelto determina quale stringa viene usata come attiva.">?</span>
+              </label>
+              <select name="db_engine">
+                <option value="sqlserver" {% if source_db_engine == 'sqlserver' %}selected{% endif %}>SQL Server</option>
+                <option value="hana" {% if source_db_engine == 'hana' %}selected{% endif %}>SAP HANA</option>
+              </select>
+            </div>
+          </div>
+
+          <h3>Parametri SQL Server</h3>
+          <div class="row">
+            <div>
+              <label>Driver</label>
+              <input type="text" name="sql_driver" value="{{ wizard_sql_driver }}">
+            </div>
+            <div>
+              <label>Server host/IP</label>
+              <input type="text" name="sql_server" value="{{ wizard_sql_server }}" placeholder="es: WIN-NSICHQOT7RV o 10.0.0.25">
+            </div>
+            <div>
+              <label>Istanza (opzionale)</label>
+              <input type="text" name="sql_instance" value="{{ wizard_sql_instance }}" placeholder="es: MSSQL2019">
+            </div>
+            <div>
+              <label>Porta (opzionale se usi istanza)</label>
+              <input type="text" name="sql_port" value="{{ wizard_sql_port }}" placeholder="es: 1433">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Database</label>
+              <input type="text" name="sql_database" value="{{ wizard_sql_database }}">
+            </div>
+            <div>
+              <label>UID</label>
+              <input type="text" name="sql_uid" value="{{ wizard_sql_uid }}">
+            </div>
+            <div>
+              <label>Password</label>
+              <input type="password" name="sql_pwd" value="{{ wizard_sql_pwd }}">
+            </div>
+            <div>
+              <label style="margin-bottom:6px;">Sicurezza</label>
+              <label class="inline-check"><input type="checkbox" class="toggle-input toggle-input-sm" name="sql_encrypt" {% if wizard_sql_encrypt %}checked{% endif %}> Encrypt=yes</label>
+              <label class="inline-check"><input type="checkbox" class="toggle-input toggle-input-sm" name="sql_trust_server_certificate" {% if wizard_sql_trust_server_certificate %}checked{% endif %}> TrustServerCertificate=yes</label>
+            </div>
+          </div>
+
+          <h3>Parametri SAP HANA</h3>
+          <div class="row">
+            <div>
+              <label>Driver</label>
+              <input type="text" name="hana_driver" value="{{ wizard_hana_driver }}">
+            </div>
+            <div>
+              <label>Server host/IP</label>
+              <input type="text" name="hana_server" value="{{ wizard_hana_server }}" placeholder="es: hana-server.local">
+            </div>
+            <div>
+              <label>Porta</label>
+              <input type="text" name="hana_port" value="{{ wizard_hana_port }}">
+            </div>
+            <div>
+              <label>Database (opzionale)</label>
+              <input type="text" name="hana_database" value="{{ wizard_hana_database }}">
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>UID</label>
+              <input type="text" name="hana_uid" value="{{ wizard_hana_uid }}">
+            </div>
+            <div>
+              <label>Password</label>
+              <input type="password" name="hana_pwd" value="{{ wizard_hana_pwd }}">
+            </div>
+            <div class="check">
+              <input type="checkbox" class="toggle-input" name="hana_encrypt" {% if wizard_hana_encrypt %}checked{% endif %}>
+              <label>Encrypt=TRUE</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="actions" style="margin-top:10px;">
+          <button class="btn secondary" type="button" data-lock-toggle>Modifica</button>
+          <button class="btn primary" type="submit" data-lock-save>Salva e testa connessione</button>
+        </div>
+      </form>
+
+      <details style="margin-top:10px;">
+        <summary>Modalita avanzata: salva stringa SQL Server manualmente (con test automatico)</summary>
+        <form method="post" action="/ui/settings/sqlserver/save" style="margin-top:10px;">
+          <label>SQL Server connection string</label>
+          <textarea name="sqlserver_conn_str" style="min-height:100px;">{{ sqlserver_conn_str }}</textarea>
+          <div class="actions" style="margin-top:8px;">
+            <button class="btn secondary" type="submit">Salva stringa manuale e testa</button>
+          </div>
+        </form>
+      </details>
+    </div>
+  </details>
+
+  <details class="wizard-card">
+    <summary>
+      <span class="wizard-step">2</span>
+      <div>
+        <div class="wizard-title">Attivazione BigQuery in Google Cloud (obbligatoria)</div>
+        <div class="wizard-sub">Da completare prima della configurazione BigQuery in app.</div>
+      </div>
+    </summary>
+    <div class="wizard-body">
+      <ol class="step-list">
+        <li>Apri <code>https://console.cloud.google.com</code> e seleziona il progetto cliente corretto.</li>
+        <li>Menu principale -> <code>Billing</code> -> collega un account di fatturazione attivo.</li>
+        <li>Menu -> <code>APIs &amp; Services</code> -> <code>Library</code> -> cerca <code>BigQuery API</code> -> <code>Enable</code>.</li>
+        <li>Menu -> <code>IAM &amp; Admin</code> -> <code>Service Accounts</code> -> <code>Create Service Account</code>.</li>
+        <li>Nome consigliato: <code>esyy-b1connector-prod</code> (o naming cliente).</li>
+        <li>Assegna ruoli: <code>BigQuery Job User</code> + <code>BigQuery Data Editor</code>.</li>
+        <li>Apri il service account -> tab <code>Keys</code> -> <code>Add Key</code> -> <code>Create new key</code> -> <code>JSON</code>.</li>
+        <li>Salva il file JSON sul server app (es. <code>C:\BigQuery\chiave_cliente.json</code>).</li>
+        <li>Apri <code>BigQuery Studio</code> e verifica che il progetto sia visibile.</li>
+      </ol>
+    </div>
+  </details>
+
+  <details class="wizard-card">
+    <summary>
+      <span class="wizard-step">3</span>
+      <div>
+        <div class="wizard-title">Setup automatico BigQuery (consigliato)</div>
+        <div class="wizard-sub">Salva config + test connessione + crea/valida dataset in un solo passaggio.</div>
+      </div>
+    </summary>
+    <div class="wizard-body">
+      {% if message_scope == 'bq_setup' and message %}
+        <div class="msg ok" style="margin-bottom:10px;">{{ message }}</div>
+      {% endif %}
+      {% if error_scope == 'bq_setup' and error %}
+        <div class="msg err" style="margin-bottom:10px;">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/ui/settings/bigquery/setup-assistant">
+        <div class="row">
+          <div>
+            <label class="field-label">Project ID <span class="hint" title="Esempio: vtronik-sap-reporting-cliente.">?</span></label>
+            <input type="text" name="bq_project_id" value="{{ bq_project_id or env_bq_project_id }}" required>
+          </div>
+          <div>
+            <label class="field-label">Dataset <span class="hint" title="Esempio: sap_reporting.">?</span></label>
+            <input type="text" name="bq_dataset" value="{{ bq_dataset or env_bq_dataset }}" required>
+          </div>
+          <div>
+            <label>Table default</label>
+            <input type="text" name="bq_table" value="{{ bq_table or env_bq_table or 'stato_ordini_cliente' }}">
+          </div>
+          <div>
+            <label>Location</label>
+            {% set bq_location_assistant = bq_location or env_bq_location or 'EU' %}
+            <select name="bq_location">
+              <option value="EU" {% if bq_location_assistant == 'EU' %}selected{% endif %}>EU</option>
+              <option value="US" {% if bq_location_assistant == 'US' %}selected{% endif %}>US</option>
+              <option value="europe-west1" {% if bq_location_assistant == 'europe-west1' %}selected{% endif %}>europe-west1</option>
+              <option value="us-central1" {% if bq_location_assistant == 'us-central1' %}selected{% endif %}>us-central1</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="field-label">Credentials file (.json) <span class="hint" title="Path assoluto locale sul server app.">?</span></label>
+        <input type="text" name="bq_credentials_file" value="{{ bq_credentials_file }}" placeholder="es: C:\BigQuery\chiave_cliente.json">
+
+        <div class="actions" style="margin-top:8px;">
+          <button class="btn primary" type="submit">Esegui setup automatico BigQuery</button>
+        </div>
+      </form>
+    </div>
+  </details>
+
+  <details class="wizard-card">
+    <summary>
+      <span class="wizard-step">4</span>
+      <div>
+        <div class="wizard-title">BigQuery avanzato (save/test/bootstrap separati)</div>
+        <div class="wizard-sub">Usa solo per diagnostica o override manuale.</div>
+      </div>
+    </summary>
+    <div class="wizard-body">
+      {% if message_scope == 'bq_save' and message %}
+        <div class="msg ok" style="margin-bottom:10px;">{{ message }}</div>
+      {% endif %}
+      {% if error_scope == 'bq_save' and error %}
+        <div class="msg err" style="margin-bottom:10px;">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/ui/settings/bigquery/save">
+        <div class="row">
+          <div>
+            <label>Project ID</label>
+            <input type="text" name="bq_project_id" value="{{ bq_project_id }}">
+          </div>
+          <div>
+            <label>Dataset default</label>
+            <input type="text" name="bq_dataset" value="{{ bq_dataset }}">
+          </div>
+          <div>
+            <label>Table default</label>
+            <input type="text" name="bq_table" value="{{ bq_table }}">
+          </div>
+          <div>
+            <label>Location</label>
+            {% set bq_location_value = bq_location or 'EU' %}
+            <select name="bq_location">
+              <option value="EU" {% if bq_location_value == 'EU' %}selected{% endif %}>EU</option>
+              <option value="US" {% if bq_location_value == 'US' %}selected{% endif %}>US</option>
+              <option value="europe-west1" {% if bq_location_value == 'europe-west1' %}selected{% endif %}>europe-west1</option>
+              <option value="us-central1" {% if bq_location_value == 'us-central1' %}selected{% endif %}>us-central1</option>
+            </select>
+          </div>
+        </div>
+        <label>Credentials file (.json)</label>
+        <input type="text" name="bq_credentials_file" value="{{ bq_credentials_file }}">
+        <div class="actions" style="margin-top:8px;">
+          <button class="btn secondary" type="submit">Salva configurazione BigQuery</button>
+        </div>
+      </form>
+
+      <div class="row" style="margin-top:12px;">
+        <div>
+          {% if message_scope == 'bq_test' and message %}
+            <div class="msg ok" style="margin-bottom:10px;">{{ message }}</div>
+          {% endif %}
+          {% if error_scope == 'bq_test' and error %}
+            <div class="msg err" style="margin-bottom:10px;">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/ui/settings/bigquery/test">
+            <label>Test connessione BigQuery</label>
+            <input type="text" name="bq_project_id" placeholder="Project ID override">
+            <input type="text" name="bq_dataset" placeholder="Dataset override" style="margin-top:6px;">
+            <select name="bq_location" style="margin-top:6px;">
+              <option value="">-- usa configurazione salvata --</option>
+              <option value="EU">EU</option>
+              <option value="US">US</option>
+              <option value="europe-west1">europe-west1</option>
+              <option value="us-central1">us-central1</option>
+            </select>
+            <input type="text" name="bq_credentials_file" placeholder="Credentials override" style="margin-top:6px;">
+            <button class="btn secondary" type="submit" style="margin-top:8px;">Test connessione BigQuery</button>
+          </form>
+        </div>
+
+        <div>
+          {% if message_scope == 'bq_bootstrap' and message %}
+            <div class="msg ok" style="margin-bottom:10px;">{{ message }}</div>
+          {% endif %}
+          {% if error_scope == 'bq_bootstrap' and error %}
+            <div class="msg err" style="margin-bottom:10px;">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/ui/settings/bigquery/bootstrap">
+            <label>Bootstrap dataset BigQuery</label>
+            <input type="text" name="bq_project_id" placeholder="Project ID override">
+            <input type="text" name="bq_dataset" placeholder="Dataset override" style="margin-top:6px;">
+            <select name="bq_location" style="margin-top:6px;">
+              <option value="">-- usa configurazione salvata --</option>
+              <option value="EU">EU</option>
+              <option value="US">US</option>
+              <option value="europe-west1">europe-west1</option>
+              <option value="us-central1">us-central1</option>
+            </select>
+            <input type="text" name="bq_credentials_file" placeholder="Credentials override" style="margin-top:6px;">
+            <button class="btn secondary" type="submit" style="margin-top:8px;">Crea/valida dataset</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="wizard-card">
+    <summary>
+      <span class="wizard-step">5</span>
+      <div>
+        <div class="wizard-title">Fallback da .env</div>
+        <div class="wizard-sub">Valori runtime letti dall'ambiente, solo consultazione.</div>
+      </div>
+    </summary>
+    <div class="wizard-body">
+      <label>SQLSERVER_CONN_STR</label>
+      {% if env_conn_str %}
+        <textarea readonly style="min-height:80px;">{{ env_conn_str }}</textarea>
+      {% else %}
+        <p class="muted">Nessun valore configurato in <code>.env</code>.</p>
+      {% endif %}
+
+      <div class="row" style="margin-top:10px;">
+        <div>
+          <label>BQ_PROJECT_ID</label>
+          <input type="text" value="{{ env_bq_project_id or '' }}" readonly>
+        </div>
+        <div>
+          <label>BQ_DATASET</label>
+          <input type="text" value="{{ env_bq_dataset or '' }}" readonly>
+        </div>
+        <div>
+          <label>BQ_TABLE</label>
+          <input type="text" value="{{ env_bq_table or '' }}" readonly>
+        </div>
+        <div>
+          <label>BQ_LOCATION</label>
+          <input type="text" value="{{ env_bq_location or '' }}" readonly>
+        </div>
+      </div>
+      <label>BQ_CREDENTIALS_FILE</label>
+      <input type="text" value="{{ env_bq_credentials_file or '' }}" readonly>
+    </div>
+  </details>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} - Login</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="theme-office app-b1connector auth-page">
+  <div class="auth-card">
+    <img src="/static/esyy-logo.svg" alt="Esyy logo" class="auth-logo">
+    <h1>{{ app_name }}</h1>
+    <p class="auth-sub">Accesso applicazione</p>
+    {% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
+    {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label>Username</label>
+      <input type="text" name="username" required autofocus>
+      <label>Password</label>
+      <input type="password" name="password" required>
+      <button class="btn primary" type="submit">Login</button>
+    </form>
+  </div>
+</body>
+</html>

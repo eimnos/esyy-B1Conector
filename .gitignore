@@ -1,0 +1,42 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Runtime / local state
+*.log
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
+# Known credentials files (do not publish)
+vtronik-sap-reporting-cliente-72be47a65bcb.json
+*service-account*.json
+*credentials*.json

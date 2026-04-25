@@ -1,0 +1,243 @@
+﻿{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>ACL - tenant {{ tenant_code }}</h2>
+  <form method="get" action="/ui/acl" class="inline-form" style="margin-bottom:10px; align-items:flex-end;">
+    <div>
+      <label class="field-label">
+        Tenant
+        <span class="hint" title="Usa tenant diversi per separare configurazioni tra clienti o ambienti.">?</span>
+      </label>
+      <input type="text" name="tenant_code" value="{{ tenant_code }}" class="inline-lg">
+    </div>
+    <div>
+      <label class="field-label">
+        Vista ACL
+        <span class="hint" title="Vista logica su cui applicare i filtri ACL generici.">?</span>
+      </label>
+      <select name="acl_view_id" class="inline-lg">
+        {% for v in views %}
+          <option value="{{ v.id }}" {% if selected_view_id == v.id %}selected{% endif %}>{{ v.view_name }} (#{{ v.id }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn secondary" type="submit">Carica</button>
+  </form>
+
+  <form method="post" action="/ui/acl/sync" class="inline-form" style="margin-bottom:10px;">
+    <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+    <input type="hidden" name="acl_view_id" value="{{ selected_view_id or '' }}">
+    <button class="btn secondary" type="submit">Sincronizza ACL su BigQuery</button>
+  </form>
+  <p class="muted">La sync aggiorna sia ACL legacy (<code>acl_utenti_clienti</code>) sia ACL filtri (<code>acl_filter_rules</code>).</p>
+</div>
+
+<div class="section">
+  <h2>ACL Generica (builder filtri per vista)</h2>
+  <p class="muted">
+    Usa questa sezione per legare <code>user_email</code> a qualunque campo della vista selezionata (codice cliente, categoria item, regione, ecc.).
+  </p>
+
+  <form method="post" action="/ui/acl/filters/create" data-acl-filter-form>
+    <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+    <div class="row">
+      <div>
+        <label>User email</label>
+        <input type="email" name="user_email" required placeholder="es. cliente@azienda.it">
+      </div>
+      <div>
+        <label>Vista</label>
+        <select name="view_id" data-acl-filter-view>
+          {% for v in views %}
+            <option value="{{ v.id }}" {% if selected_view_id == v.id %}selected{% endif %}>{{ v.view_name }} (#{{ v.id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Campo</label>
+        <select name="field_name" data-acl-filter-field required>
+          <option value="">-- carico campi vista --</option>
+        </select>
+      </div>
+      <div>
+        <label>Operatore</label>
+        <select name="operator" data-acl-filter-operator>
+          {% for op_key, op_label in acl_filter_operators %}
+            <option value="{{ op_key }}">{{ op_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Valore filtro</label>
+        <input type="text" name="field_value" data-acl-filter-value placeholder="es. C0001 oppure A01,B02,C03">
+        <p class="field-help">Per <code>IN</code> usa valori separati da virgola.</p>
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_master" data-acl-filter-master>
+        <label>Master user (vede tutto nella vista)</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" class="toggle-input" name="is_active" checked>
+        <label>Attiva</label>
+      </div>
+      <div>
+        <label>Note</label>
+        <input type="text" name="note">
+      </div>
+    </div>
+
+    <div class="field-help" data-acl-filter-status></div>
+    <button class="btn primary" type="submit">Crea regola ACL generica</button>
+  </form>
+</div>
+
+<div class="section">
+  <h2>Regole ACL Generiche</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Vista</th>
+        <th>Email</th>
+        <th>Campo</th>
+        <th>Op</th>
+        <th>Valore</th>
+        <th>Master</th>
+        <th>Attiva</th>
+        <th>Note</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rule, view in filter_rules %}
+      <tr>
+        <td>{{ rule.id }}</td>
+        <td>{{ view.view_name }}</td>
+        <td>{{ rule.user_email }}</td>
+        <td>{{ rule.field_name }}</td>
+        <td>{{ rule.operator }}</td>
+        <td>{{ rule.field_value }}</td>
+        <td>{{ 'SI' if rule.is_master else 'NO' }}</td>
+        <td>{{ 'SI' if rule.is_active else 'NO' }}</td>
+        <td>{{ rule.note or '' }}</td>
+        <td class="actions">
+          <form method="post" action="/ui/acl/filters/{{ rule.id }}/delete" onsubmit="return confirm('Eliminare ACL filtro?')">
+            <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+            <input type="hidden" name="acl_view_id" value="{{ selected_view_id or '' }}">
+            <button class="btn danger" type="submit">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="muted">Nessuna regola ACL generica per questo tenant.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Query Looker Studio generata (ACL generica)</h2>
+  <p class="muted">
+    Copia questa query nel data source BigQuery di Looker Studio (Query personalizzata).
+    Il parametro <code>@DS_USER_EMAIL</code> e disponibile in Looker Studio, non nella console SQL BigQuery.
+  </p>
+  {% if selected_view_row %}
+    <p class="muted">Vista selezionata: <code>{{ selected_view_row.view_name }}</code></p>
+  {% endif %}
+  <textarea readonly style="min-height:260px;">{{ looker_query_sql }}</textarea>
+</div>
+
+<details class="section" style="padding:0; overflow:hidden;">
+  <summary style="padding:12px 14px; cursor:pointer;">ACL Legacy (customer_code) - compatibilita cliente esistente</summary>
+  <div style="padding:14px; border-top:1px solid var(--line);">
+    <p class="muted">Per i master user non scrivere <code>{{ master_customer_code }}</code> a mano: usa la spunta dedicata.</p>
+
+    <h3 style="margin-top:6px;">Crea regola ACL legacy</h3>
+    <form method="post" action="/ui/acl/create" data-acl-form>
+      <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+      <input type="hidden" name="acl_view_id" value="{{ selected_view_id or '' }}">
+      <div class="row">
+        <div>
+          <label class="field-label">
+            User email
+            <span class="hint" title="Email dell'utente Looker Studio da autorizzare.">?</span>
+          </label>
+          <input type="email" name="user_email" required>
+        </div>
+        <div>
+          <label class="field-label">
+            Customer code
+            <span class="hint" title="Codice cliente SAP visibile all'utente.">?</span>
+          </label>
+          <input type="text" name="customer_code" required placeholder="es. C0001" data-acl-customer>
+          <p class="field-help">Compila solo se l'utente non e master.</p>
+        </div>
+        <div class="check">
+          <input type="checkbox" class="toggle-input" name="is_master" data-acl-master>
+          <label>Master user (vede tutto)</label>
+        </div>
+        <div class="check">
+          <input type="checkbox" class="toggle-input" name="is_active" checked>
+          <label>Attiva</label>
+        </div>
+      </div>
+      <div>
+        <label>Note</label>
+        <input type="text" name="note">
+      </div>
+      <button class="btn primary" type="submit">Crea regola legacy</button>
+    </form>
+
+    <h3 style="margin-top:12px;">Regole ACL legacy</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Email</th>
+          <th>Customer code</th>
+          <th>Attiva</th>
+          <th>Note</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td>{{ r.user_email }}</td>
+          <td>{{ r.customer_code }}</td>
+          <td>{{ 'SI' if r.is_active else 'NO' }}</td>
+          <td>{{ r.note or '' }}</td>
+          <td class="actions">
+            <form method="post" action="/ui/acl/{{ r.id }}/update" class="inline-form" data-acl-form>
+              <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+              <input type="hidden" name="acl_view_id" value="{{ selected_view_id or '' }}">
+              <input type="email" name="user_email" value="{{ r.user_email }}" class="inline-email" title="Email utente">
+              <input type="text" name="customer_code" value="{{ r.customer_code }}" class="inline-sm" data-acl-customer title="Codice cliente">
+              <input type="text" name="note" value="{{ r.note or '' }}" class="inline-md" title="Note">
+              <label class="inline-check">
+                <input type="checkbox" class="toggle-input toggle-input-sm" name="is_master" data-acl-master {% if r.customer_code == master_customer_code %}checked{% endif %}> master
+              </label>
+              <label class="inline-check">
+                <input type="checkbox" class="toggle-input toggle-input-sm" name="is_active" {% if r.is_active %}checked{% endif %}> attiva
+              </label>
+              <button class="btn secondary" type="submit">Aggiorna</button>
+            </form>
+            <form method="post" action="/ui/acl/{{ r.id }}/delete" onsubmit="return confirm('Eliminare regola ACL?')">
+              <input type="hidden" name="tenant_code" value="{{ tenant_code }}">
+              <input type="hidden" name="acl_view_id" value="{{ selected_view_id or '' }}">
+              <button class="btn danger" type="submit">Elimina</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Nessuna regola ACL legacy per questo tenant.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endblock %}
