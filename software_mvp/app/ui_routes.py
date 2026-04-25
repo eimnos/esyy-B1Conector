@@ -586,6 +586,23 @@ def dashboard(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> HTMLResponse:
+    return _render_overview(
+        request=request,
+        db=db,
+        message=message,
+        error=error,
+        active_nav="overview",
+    )
+
+
+def _render_overview(
+    *,
+    request: Request,
+    db: Session,
+    message: str | None,
+    error: str | None,
+    active_nav: str,
+) -> HTMLResponse:
     stats = {
         "views": db.query(func.count(ReportView.id)).scalar() or 0,
         "pipelines": db.query(func.count(Pipeline.id)).scalar() or 0,
@@ -602,10 +619,92 @@ def dashboard(
         name="dashboard.html",
         context={
             "app_name": settings.app_name,
-            "active_nav": "dashboard",
+            "active_nav": active_nav,
             "stats": stats,
             "recent_runs": recent_runs,
             "pipeline_by_id": pipeline_by_id,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.get("/ui/overview", response_class=HTMLResponse)
+def ui_overview(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    return _render_overview(
+        request=request,
+        db=db,
+        message=message,
+        error=error,
+        active_nav="overview",
+    )
+
+
+@router.get("/ui/configurations")
+def ui_configurations() -> RedirectResponse:
+    return RedirectResponse(url="/ui/views", status_code=303)
+
+
+@router.get("/ui/summaries", response_class=HTMLResponse)
+def ui_summaries(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    return _render_overview(
+        request=request,
+        db=db,
+        message=message,
+        error=error,
+        active_nav="summaries",
+    )
+
+
+@router.get("/ui/monitoring", response_class=HTMLResponse)
+def ui_monitoring(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    return _render_overview(
+        request=request,
+        db=db,
+        message=message,
+        error=error,
+        active_nav="monitoring",
+    )
+
+
+@router.get("/ui/users-access")
+def ui_users_access(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+    user = _get_current_user(request, db)
+    if _is_admin(user):
+        return RedirectResponse(url="/ui/users", status_code=303)
+    return RedirectResponse(url="/ui/acl", status_code=303)
+
+
+@router.get("/ui/advanced", response_class=HTMLResponse)
+def ui_advanced(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    user = _get_current_user(request, db)
+    return templates.TemplateResponse(
+        request=request,
+        name="advanced.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "advanced",
+            "is_admin": _is_admin(user),
             "message": message,
             "error": error,
         },

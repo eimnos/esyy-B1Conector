@@ -5,52 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title if title else app_name }}</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/css/esyy-ui.css">
 </head>
 <body class="theme-office app-b1connector" data-active-nav="{{ active_nav if active_nav is defined else '' }}">
-  <div class="layout">
-    <div class="topbar">
-      <div class="brand-wrap">
-        <img src="/static/esyy-logo.svg" alt="Esyy logo" class="brand-logo">
-        <div class="brand">{{ app_name }}</div>
+  {% set role = request.state.current_user.role if request.state.current_user else '' %}
+  {% set active = active_nav if active_nav is defined else '' %}
+  {% set nav_key = active %}
+  {% if active in ['dashboard', 'overview'] %}
+    {% set nav_key = 'overview' %}
+  {% elif active in ['views', 'pipelines', 'schedules', 'acl', 'settings', 'configurations'] %}
+    {% set nav_key = 'configurations' %}
+  {% elif active in ['users', 'users_access'] %}
+    {% set nav_key = 'users_access' %}
+  {% elif active in ['summaries'] %}
+    {% set nav_key = 'summaries' %}
+  {% elif active in ['monitoring'] %}
+    {% set nav_key = 'monitoring' %}
+  {% elif active in ['advanced'] %}
+    {% set nav_key = 'advanced' %}
+  {% endif %}
+
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <a href="/ui/overview" class="sidebar-brand">
+        <img src="/static/esyy-logo.svg" alt="Esyy logo" class="sidebar-logo">
+        <div class="sidebar-brand-text">
+          <span class="sidebar-kicker">ESYY SUITE</span>
+          <span class="sidebar-title">{{ app_name }}</span>
+        </div>
+      </a>
+      <nav class="sidebar-nav">
+        <a href="/ui/overview" class="sidebar-link {{ 'active' if nav_key == 'overview' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM7 8h4v4H7zm6 0h4v2h-4zm0 4h4v2h-4zM7 14h4v2H7z"/></svg>
+          <span>Panoramica</span>
+        </a>
+        <a href="/ui/configurations" class="sidebar-link {{ 'active' if nav_key == 'configurations' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v3H3zm0 5h18v3H3zm0 5h12v3H3z"/></svg>
+          <span>Configurazioni</span>
+        </a>
+        <a href="/ui/summaries" class="sidebar-link {{ 'active' if nav_key == 'summaries' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zm3 3h8v2H8zm0 4h8v2H8zm0 4h5v2H8z"/></svg>
+          <span>Riepiloghi</span>
+        </a>
+        <a href="/ui/monitoring" class="sidebar-link {{ 'active' if nav_key == 'monitoring' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16v2H4zm1-3h3l2-4 3 6 2-4h4v2h-3l-2 4-3-6-2 4H5z"/></svg>
+          <span>Monitoraggio</span>
+        </a>
+        <a href="/ui/users-access" class="sidebar-link {{ 'active' if nav_key == 'users_access' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-7 8a7 7 0 0 1 14 0zM18 9V7h-2V5h2V3h2v2h2v2h-2v2z"/></svg>
+          <span>Utenti e accessi</span>
+        </a>
+        <a href="/ui/advanced" class="sidebar-link {{ 'active' if nav_key == 'advanced' else '' }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H5a2 2 0 0 0-2 2v9h2V4h9zM9 7h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm1 3v2h8v-2zm0 4v2h5v-2z"/></svg>
+          <span>Avanzate</span>
+        </a>
+      </nav>
+      <div class="sidebar-meta">
+        <div><strong>Tenant</strong> default</div>
+        <div><strong>Versione</strong> MVP</div>
       </div>
-      <div class="nav">
-        <a href="/" class="{{ 'active' if active_nav == 'dashboard' else '' }}">Dashboard</a>
-        <a href="/ui/views" class="{{ 'active' if active_nav == 'views' else '' }}">Views</a>
-        <a href="/ui/pipelines" class="{{ 'active' if active_nav == 'pipelines' else '' }}">Pipelines</a>
-        <a href="/ui/schedules" class="{{ 'active' if active_nav == 'schedules' else '' }}">Schedules</a>
-        <a href="/ui/acl" class="{{ 'active' if active_nav == 'acl' else '' }}">ACL</a>
-        {% if request.state.current_user and request.state.current_user.role == 'admin' %}
-        <a href="/ui/settings" class="{{ 'active' if active_nav == 'settings' else '' }}">Settings</a>
-        <a href="/ui/users" class="{{ 'active' if active_nav == 'users' else '' }}">Users</a>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-header">
+        <div class="app-header-title">
+          <h1>{{ title if title else app_name }}</h1>
+          <p>{{ role|upper if role else "ACCESSO" }}</p>
+        </div>
+        <div class="app-header-actions">
+          <button class="btn secondary btn-xs" type="button" data-guide-open>Guide</button>
+          <a href="/docs" class="btn secondary btn-xs" target="_blank" rel="noopener">API Docs</a>
+          {% if request.state.current_user %}
+            <span class="user-chip">{{ request.state.current_user.username }} ({{ request.state.current_user.role }})</span>
+            <form method="post" action="/logout" class="logout-form">
+              <button class="btn secondary btn-xs" type="submit">Logout</button>
+            </form>
+          {% endif %}
+        </div>
+      </header>
+
+      <main class="content app-content">
+        {% if not suppress_global_flash %}
+          {% if message %}
+            <div class="msg ok">{{ message }}</div>
+          {% endif %}
+          {% if error %}
+            <div class="msg err">{{ error }}</div>
+          {% endif %}
         {% endif %}
-        <a href="/docs">API Docs</a>
-      </div>
-      <div class="spacer"></div>
-      {% if request.state.current_user %}
-      <div class="userbox">
-        <button class="btn secondary" type="button" data-guide-open>Guide</button>
-        <span>{{ request.state.current_user.username }} ({{ request.state.current_user.role }})</span>
-        <form method="post" action="/logout">
-          <button class="btn secondary" type="submit">Logout</button>
-        </form>
-      </div>
-      {% endif %}
+
+        {% block body %}{% endblock %}
+      </main>
     </div>
 
-    <main class="content">
-      {% if not suppress_global_flash %}
-        {% if message %}
-          <div class="msg ok">{{ message }}</div>
-        {% endif %}
-        {% if error %}
-          <div class="msg err">{{ error }}</div>
-        {% endif %}
-      {% endif %}
-
-      {% block body %}{% endblock %}
-    </main>
   </div>
-
   <div class="guide-overlay" data-guide-overlay hidden></div>
   <aside class="guide-drawer" data-guide-drawer aria-hidden="true">
     <div class="guide-drawer-head">

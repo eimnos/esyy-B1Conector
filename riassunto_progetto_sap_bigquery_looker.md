@@ -1842,3 +1842,46 @@ Attivita eseguite:
 
 3) Verifica remota
 - head remoto confermato: `refs/heads/main -> 6c9438b81a50d07741e185960b7e8c13b1f3452d`
+
+### 2026-04-25 - UX/UI Wizard Redesign (Sprint 1 avviato)
+
+Obiettivo:
+
+- recepire la specifica UX/UI `docs/ux_ui_wizard_redesign.md` e applicare il primo sprint senza toccare logica pipeline/ACL/scheduler.
+
+Implementazione:
+
+1) Nuova app shell grafica
+- aggiornato `software_mvp/app/templates/base.html`
+- introdotti:
+  - sidebar scura con logo + menu business
+  - header chiaro con azioni (`Guide`, `API Docs`, utente, `Logout`)
+  - mapping nav da voci tecniche a macro-sezioni (`Panoramica`, `Configurazioni`, `Riepiloghi`, `Monitoraggio`, `Utenti e accessi`, `Avanzate`)
+
+2) CSS dedicato al nuovo layout
+- creato `software_mvp/app/static/css/esyy-ui.css`
+- aggiunti token e classi per:
+  - shell 2 colonne
+  - sidebar/menu con icone inline SVG
+  - header e badge utente
+  - responsive tablet/mobile
+- `base.html` ora carica anche `/static/css/esyy-ui.css`
+
+3) Route business di compatibilita
+- aggiornato `software_mvp/app/ui_routes.py`
+- aggiunte route:
+  - `GET /ui/overview`
+  - `GET /ui/configurations` (redirect a `/ui/views`)
+  - `GET /ui/summaries`
+  - `GET /ui/monitoring`
+  - `GET /ui/users-access` (redirect admin -> `/ui/users`, altri -> `/ui/acl`)
+  - `GET /ui/advanced`
+- `/` ora usa `active_nav=overview`
+
+4) Pagina Avanzate iniziale
+- creato template `software_mvp/app/templates/advanced.html`
+- include warning per utenti tecnici e link a pagine raw (views/pipelines/schedules/acl/settings/users)
+
+Note tecniche:
+
+- in questo ambiente locale non e stato possibile eseguire test runtime completi (python/venv non utilizzabile), quindi la verifica finale UI va eseguita sul PC operativo con i comandi standard di avvio.
