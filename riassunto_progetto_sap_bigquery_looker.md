@@ -1885,3 +1885,52 @@ Implementazione:
 Note tecniche:
 
 - in questo ambiente locale non e stato possibile eseguire test runtime completi (python/venv non utilizzabile), quindi la verifica finale UI va eseguita sul PC operativo con i comandi standard di avvio.
+
+### 2026-04-25 - UX/UI Wizard Redesign (Sprint 2)
+
+Obiettivo:
+
+- realizzare la nuova pagina `Configurazioni` con card wizard ordinate e navigabili, mantenendo invariata la logica business esistente.
+
+Implementazione:
+
+1) Backend wizard definitions + stato dinamico
+- file: `software_mvp/app/ui_routes.py`
+- aggiunte:
+  - `WIZARD_DEFINITIONS` con 8 wizard (`sap`, `bigquery`, `data`, `sync`, `schedule`, `access`, `looker`, `monitoring`)
+  - helper `_build_wizard_cards(db)` per calcolare per ogni card:
+    - `status`
+    - `progress`
+    - `summary`
+    - `action_label` (Configura / Modifica / Risolvi)
+  - helper `_wizard_status_from_progress(...)` e `_wizard_action_label(...)`
+
+2) Nuova pagina Configurazioni
+- route: `GET /ui/configurations`
+- template: `software_mvp/app/templates/configurations.html`
+- contenuti:
+  - griglia card wizard con numero ordine, icona, titolo, descrizione
+  - badge stato, progress bar, riepilogo
+  - azione primaria `... con wizard` + link secondario `Dettagli tecnici`
+
+3) Route wizard placeholder (navigazione pronta)
+- route: `GET /ui/wizard/{wizard_id}`
+- template: `software_mvp/app/templates/wizard_stub.html`
+- comportamento:
+  - mostra stato attuale del wizard selezionato
+  - fornisce accesso alla configurazione tecnica esistente
+  - prepara il terreno per Sprint 3 (stepper e wizard completo)
+
+4) Stile UI per card wizard
+- file: `software_mvp/app/static/css/esyy-ui.css`
+- aggiunte classi:
+  - `wizard-grid`, `wizard-card`, `wizard-chip`, `wizard-progress`, `wizard-actions`, ecc.
+
+5) Coerenza copy overview
+- file: `software_mvp/app/templates/dashboard.html`
+- aggiornato testo informativo da menu tecnico diretto a riferimento menu `Avanzate`.
+
+Note:
+
+- non sono state rimosse route tecniche esistenti (`/ui/views`, `/ui/pipelines`, `/ui/schedules`, `/ui/acl`, `/ui/settings`)
+- nessuna modifica al motore di pipeline, ACL o scheduler.

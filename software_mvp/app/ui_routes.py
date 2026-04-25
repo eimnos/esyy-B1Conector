@@ -75,6 +75,72 @@ ACL_FILTER_OPERATORS = [
     ("LTE", "<="),
 ]
 ACL_FILTER_OPERATOR_KEYS = {key for key, _ in ACL_FILTER_OPERATORS}
+WIZARD_DEFINITIONS = [
+    {
+        "id": "sap",
+        "order": "01",
+        "title": "Connessione SAP B1",
+        "description": "Configura il database sorgente SAP Business One.",
+        "icon_label": "SAP",
+        "technical_route": "/ui/settings",
+    },
+    {
+        "id": "bigquery",
+        "order": "02",
+        "title": "Connessione BigQuery",
+        "description": "Imposta progetto, dataset e credenziali Google Cloud.",
+        "icon_label": "BQ",
+        "technical_route": "/ui/settings",
+    },
+    {
+        "id": "data",
+        "order": "03",
+        "title": "Dati SAP da esportare",
+        "description": "Definisci le viste dati da usare nelle esportazioni.",
+        "icon_label": "SQL",
+        "technical_route": "/ui/views",
+    },
+    {
+        "id": "sync",
+        "order": "04",
+        "title": "Sincronizzazione",
+        "description": "Collega viste e tabelle BigQuery tramite pipeline.",
+        "icon_label": "SYNC",
+        "technical_route": "/ui/pipelines",
+    },
+    {
+        "id": "schedule",
+        "order": "05",
+        "title": "Pianificazione",
+        "description": "Configura quando eseguire le pipeline in automatico.",
+        "icon_label": "CRON",
+        "technical_route": "/ui/schedules",
+    },
+    {
+        "id": "access",
+        "order": "06",
+        "title": "Accessi dati clienti",
+        "description": "Definisci i filtri ACL per limitare la visibilita dati.",
+        "icon_label": "ACL",
+        "technical_route": "/ui/acl",
+    },
+    {
+        "id": "looker",
+        "order": "07",
+        "title": "Looker Studio",
+        "description": "Genera query sicure per la visualizzazione per utente.",
+        "icon_label": "BI",
+        "technical_route": "/ui/acl",
+    },
+    {
+        "id": "monitoring",
+        "order": "08",
+        "title": "Monitoraggio e alert",
+        "description": "Controlla esecuzioni, esiti e alert operativi.",
+        "icon_label": "OPS",
+        "technical_route": "/ui/monitoring",
+    },
+]
 
 
 def _redirect(
@@ -328,6 +394,148 @@ def _get_current_user(request: Request, db: Session) -> AppUser | None:
 
 def _is_admin(user: AppUser | None) -> bool:
     return bool(user and user.role == ROLE_ADMIN)
+
+
+def _wizard_status_from_progress(progress: int, has_issue: bool = False) -> tuple[str, str, str]:
+    if has_issue:
+        return "action_required", "Da risolvere", "danger"
+    if progress >= 100:
+        return "completed", "Completata", "success"
+    if progress >= 45:
+        return "in_progress", "In corso", "warning"
+    return "not_configured", "Da configurare", "neutral"
+
+
+def _wizard_action_label(status: str) -> str:
+    if status == "completed":
+        return "Modifica"
+    if status == "action_required":
+        return "Risolvi"
+    return "Configura"
+
+
+def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
+    sql_conn = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY).strip()
+    hana_conn = _load_setting(db, HANA_CONN_STR_SETTING_KEY).strip()
+    source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower()
+
+    bq_project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
+    bq_dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
+    bq_creds = _load_setting(db, BQ_CREDENTIALS_FILE_SETTING_KEY, default=settings.bq_credentials_file).strip()
+
+    views_total = db.query(func.count(ReportView.id)).scalar() or 0
+    views_active = db.query(func.count(ReportView.id)).filter(ReportView.is_active.is_(True)).scalar() or 0
+    pipelines_total = db.query(func.count(Pipeline.id)).scalar() or 0
+    pipelines_active = db.query(func.count(Pipeline.id)).filter(Pipeline.is_active.is_(True)).scalar() or 0
+    schedules_total = db.query(func.count(Schedule.id)).scalar() or 0
+    schedules_active = db.query(func.count(Schedule.id)).filter(Schedule.is_active.is_(True)).scalar() or 0
+    acl_rules_active = db.query(func.count(ACLRule.id)).filter(ACLRule.is_active.is_(True)).scalar() or 0
+    acl_filters_active = (
+        db.query(func.count(ACLFilterRule.id))
+        .filter(ACLFilterRule.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    run_total = db.query(func.count(RunLog.id)).scalar() or 0
+    last_run = db.query(RunLog).order_by(RunLog.id.desc()).first()
+    last_run_status = (last_run.status or "").strip().upper() if last_run else ""
+    run_error = bool(last_run and last_run_status and last_run_status != "OK")
+
+    if source_db_engine == "hana":
+        sap_connected = bool(hana_conn)
+        sap_summary = "Motore HANA configurato." if hana_conn else "Connessione HANA non configurata."
+    else:
+        sap_connected = bool(sql_conn)
+        sap_summary = "Motore SQL Server configurato." if sql_conn else "Connessione SQL Server non configurata."
+    if not sap_connected and (sql_conn or hana_conn):
+        sap_summary = "Connessione presente ma non allineata al motore selezionato."
+    sap_progress = 100 if sap_connected else (35 if (sql_conn or hana_conn) else 0)
+
+    bq_parts = int(bool(bq_project)) + int(bool(bq_dataset)) + int(bool(bq_creds))
+    bq_progress = int((bq_parts / 3) * 100)
+    if bq_parts == 3:
+        bq_summary = f"{bq_project}.{bq_dataset}"
+    else:
+        bq_summary = f"Completati {bq_parts}/3 campi (project, dataset, credenziali)."
+
+    data_progress = 100 if views_active > 0 else (40 if views_total > 0 else 0)
+    data_summary = f"View attive: {views_active} su {views_total}."
+
+    sync_progress = 100 if pipelines_active > 0 else (50 if pipelines_total > 0 else 0)
+    sync_has_issue = pipelines_active > 0 and run_error
+    if pipelines_total == 0:
+        sync_summary = "Nessuna pipeline configurata."
+    elif pipelines_active == 0:
+        sync_summary = f"Pipelines presenti: {pipelines_total}, ma nessuna attiva."
+    else:
+        sync_summary = f"Pipelines attive: {pipelines_active} su {pipelines_total}."
+
+    schedule_progress = 100 if schedules_active > 0 else (35 if schedules_total > 0 else 0)
+    if schedules_total == 0:
+        schedule_summary = "Nessuna pianificazione configurata."
+    elif schedules_active == 0:
+        schedule_summary = "Schedulazioni presenti ma non attive."
+    else:
+        schedule_summary = f"Schedulazioni attive: {schedules_active}."
+
+    access_items = acl_filters_active + acl_rules_active
+    access_progress = 100 if access_items > 0 else 0
+    access_summary = (
+        f"Regole ACL attive: {acl_rules_active} classiche, {acl_filters_active} filtri."
+        if access_items > 0
+        else "Nessuna regola ACL attiva."
+    )
+
+    looker_prereq = int(views_active > 0) + int(pipelines_active > 0) + int(access_items > 0)
+    looker_progress = int((looker_prereq / 3) * 100)
+    looker_summary = (
+        "Prerequisiti completati: view + pipeline + ACL."
+        if looker_prereq == 3
+        else f"Prerequisiti completati: {looker_prereq}/3."
+    )
+
+    monitoring_progress = 100 if run_total > 0 else 30
+    monitoring_summary = (
+        f"Ultimo run: stato {last_run_status or 'N/D'}."
+        if run_total > 0
+        else "Nessun run registrato finora."
+    )
+
+    progress_map = {
+        "sap": (sap_progress, False, sap_summary),
+        "bigquery": (bq_progress, False, bq_summary),
+        "data": (data_progress, False, data_summary),
+        "sync": (sync_progress, sync_has_issue, sync_summary),
+        "schedule": (schedule_progress, False, schedule_summary),
+        "access": (access_progress, False, access_summary),
+        "looker": (looker_progress, False, looker_summary),
+        "monitoring": (monitoring_progress, run_error, monitoring_summary),
+    }
+
+    cards: list[dict[str, str | int]] = []
+    for raw in WIZARD_DEFINITIONS:
+        progress, has_issue, summary = progress_map.get(raw["id"], (0, False, "Non configurata."))
+        status, status_label, status_class = _wizard_status_from_progress(progress, has_issue)
+        cards.append(
+            {
+                **raw,
+                "progress": progress,
+                "status": status,
+                "status_label": status_label,
+                "status_class": status_class,
+                "summary": summary,
+                "route": f"/ui/wizard/{raw['id']}",
+                "action_label": _wizard_action_label(status),
+            }
+        )
+    return cards
+
+
+def _wizard_definition_by_id(wizard_id: str) -> dict[str, str] | None:
+    for row in WIZARD_DEFINITIONS:
+        if row["id"] == wizard_id:
+            return row
+    return None
 
 
 def _load_setting(db: Session, key: str, default: str = "") -> str:
@@ -645,9 +853,61 @@ def ui_overview(
     )
 
 
-@router.get("/ui/configurations")
-def ui_configurations() -> RedirectResponse:
-    return RedirectResponse(url="/ui/views", status_code=303)
+@router.get("/ui/configurations", response_class=HTMLResponse)
+def ui_configurations(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    cards = _build_wizard_cards(db)
+    completed = sum(1 for c in cards if c["status"] == "completed")
+    action_required = sum(1 for c in cards if c["status"] == "action_required")
+    return templates.TemplateResponse(
+        request=request,
+        name="configurations.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "configurations",
+            "wizard_cards": cards,
+            "completed_count": completed,
+            "total_count": len(cards),
+            "action_required_count": action_required,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.get("/ui/wizard/{wizard_id}", response_class=HTMLResponse)
+def ui_wizard_stub(
+    wizard_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    row = _wizard_definition_by_id(wizard_id)
+    if row is None:
+        return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
+
+    cards = _build_wizard_cards(db)
+    card = next((c for c in cards if c["id"] == wizard_id), None)
+    if not card:
+        return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non disponibile.")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="wizard_stub.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "configurations",
+            "wizard": card,
+            "technical_route": row["technical_route"],
+            "message": message,
+            "error": error,
+        },
+    )
 
 
 @router.get("/ui/summaries", response_class=HTMLResponse)
