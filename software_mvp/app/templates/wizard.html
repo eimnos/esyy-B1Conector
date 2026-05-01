@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <div class="wizard-stub-head">
+    <div class="wizard-icon wizard-icon-lg">{{ wizard.icon_label }}</div>
+    <div>
+      <h2>{{ wizard.order }} - {{ wizard.title }}</h2>
+      <p class="muted">{{ wizard_meta.subtitle }}</p>
+    </div>
+  </div>
+  <div class="wizard-progress-row wizard-progress-row-inline">
+    <div class="wizard-progress">
+      <span style="width: {{ progress }}%"></span>
+    </div>
+    <span class="wizard-progress-value">{{ progress }}%</span>
+    <span class="wizard-chip chip-{{ wizard.status_class }}">{{ wizard.status_label }}</span>
+    <span class="muted">{{ step_marker }}</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="wizard-steps-line">
+    {% for s in steps %}
+      {% set step_class = "pending" %}
+      {% if loop.index0 < step_index %}
+        {% set step_class = "done" %}
+      {% elif loop.index0 == step_index %}
+        {% set step_class = "current" %}
+      {% endif %}
+      <div class="wizard-step-item {{ step_class }}">
+        <span>{{ loop.index }}</span>
+        <small>{{ s.title }}</small>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <form method="post" action="/ui/wizard/{{ wizard.id }}" class="wizard-form">
+    <input type="hidden" name="step_index" value="{{ step_index }}">
+
+    <h3>{{ current_step.title }}</h3>
+    <p class="wizard-question">{{ current_step.question }}</p>
+    <p class="muted">{{ current_step.description }}</p>
+
+    {% set step_type = current_step.type %}
+
+    {% if step_type == "choice" %}
+      <div class="wizard-choice-list">
+        {% for opt in current_step.options %}
+          <label class="wizard-choice-item">
+            <input
+              type="radio"
+              name="choice_value"
+              value="{{ opt.value }}"
+              {% if current_payload.get("value", "") == opt.value %}checked{% endif %}
+            >
+            <span>{{ opt.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+
+    {% elif step_type == "input" %}
+      {% set field = current_step.fields[0] if current_step.fields else None %}
+      {% if field %}
+        <div>
+          <label>{{ field.label }}</label>
+          <input
+            type="{{ field.input_type if field.input_type else 'text' }}"
+            name="field__{{ field.id }}"
+            value="{{ current_payload.get(field.id, '') }}"
+            placeholder="{{ field.placeholder if field.placeholder else '' }}"
+            {% if field.required %}required{% endif %}
+          >
+        </div>
+      {% endif %}
+
+    {% elif step_type == "two_inputs" %}
+      <div class="row">
+        {% for field in current_step.fields %}
+          <div>
+            <label>{{ field.label }}</label>
+            <input
+              type="{{ field.input_type if field.input_type else 'text' }}"
+              name="field__{{ field.id }}"
+              value="{{ current_payload.get(field.id, '') }}"
+              placeholder="{{ field.placeholder if field.placeholder else '' }}"
+              {% if field.required %}required{% endif %}
+            >
+          </div>
+        {% endfor %}
+      </div>
+
+    {% elif step_type == "credentials" %}
+      <div class="row">
+        {% for field in current_step.fields %}
+          <div>
+            <label>{{ field.label }}</label>
+            <input
+              type="{{ field.input_type if field.input_type else 'text' }}"
+              name="field__{{ field.id }}"
+              value="{{ current_payload.get(field.id, '') }}"
+              placeholder="{{ field.placeholder if field.placeholder else '' }}"
+              {% if field.required %}required{% endif %}
+            >
+          </div>
+        {% endfor %}
+      </div>
+
+    {% elif step_type == "instruction" %}
+      <ol class="wizard-instruction-list">
+        {% for item in current_step.instructions %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ol>
+
+    {% elif step_type == "test" %}
+      <div class="row">
+        {% for field in current_step.fields %}
+          <div>
+            <label>{{ field.label }}</label>
+            {% if field.input_type == "select" %}
+              <select name="field__{{ field.id }}">
+                {% for opt in field.options %}
+                  <option value="{{ opt.value }}" {% if current_payload.get(field.id, '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                {% endfor %}
+              </select>
+            {% else %}
+              <input
+                type="{{ field.input_type if field.input_type else 'text' }}"
+                name="field__{{ field.id }}"
+                value="{{ current_payload.get(field.id, '') }}"
+                placeholder="{{ field.placeholder if field.placeholder else '' }}"
+              >
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="muted">I test reali restano eseguibili nella pagina tecnica dedicata.</p>
+
+    {% elif step_type == "review" %}
+      <div class="wizard-review-box">
+        {% if draft_data %}
+          {% for k, v in draft_data.items() %}
+            <div class="wizard-review-item">
+              <strong>{{ k }}</strong>
+              <pre>{{ v }}</pre>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted">Nessun dato bozza disponibile.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="wizard-actions wizard-actions-spaced">
+      {% if has_previous %}
+      <button class="btn secondary" type="submit" name="action" value="back" formnovalidate>Indietro</button>
+      {% else %}
+      <span></span>
+      {% endif %}
+      <button class="btn secondary" type="submit" name="action" value="save" formnovalidate>Salva bozza</button>
+      <button class="btn primary" type="submit" name="action" value="continue">
+        {% if has_next %}Conferma e continua{% else %}Conferma finale{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="section">
+  <div class="wizard-actions">
+    <a href="{{ technical_route }}" class="btn secondary btn-xs">Apri configurazione tecnica</a>
+    <a href="/ui/configurations" class="btn secondary btn-xs">Torna alle configurazioni</a>
+  </div>
+</div>
+{% endblock %}

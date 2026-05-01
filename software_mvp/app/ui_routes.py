@@ -44,12 +44,14 @@ from .services.sqlserver_service import (
     publish_view,
     test_sqlserver_connection,
 )
+from .services.wizard_definitions import get_wizard_definition, list_wizard_card_definitions
 
 router = APIRouter(tags=["ui"])
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 SOURCE_DB_ENGINE_SETTING_KEY = "source_db_engine"
 HANA_CONN_STR_SETTING_KEY = "hana_conn_str"
 MASTER_CUSTOMER_CODE = "__ALL__"
+WIZARD_DRAFTS_SESSION_KEY = "wizard_drafts"
 SCHEDULE_TIMEZONE_OPTIONS = [
     "Europe/Rome",
     "UTC",
@@ -75,72 +77,6 @@ ACL_FILTER_OPERATORS = [
     ("LTE", "<="),
 ]
 ACL_FILTER_OPERATOR_KEYS = {key for key, _ in ACL_FILTER_OPERATORS}
-WIZARD_DEFINITIONS = [
-    {
-        "id": "sap",
-        "order": "01",
-        "title": "Connessione SAP B1",
-        "description": "Configura il database sorgente SAP Business One.",
-        "icon_label": "SAP",
-        "technical_route": "/ui/settings",
-    },
-    {
-        "id": "bigquery",
-        "order": "02",
-        "title": "Connessione BigQuery",
-        "description": "Imposta progetto, dataset e credenziali Google Cloud.",
-        "icon_label": "BQ",
-        "technical_route": "/ui/settings",
-    },
-    {
-        "id": "data",
-        "order": "03",
-        "title": "Dati SAP da esportare",
-        "description": "Definisci le viste dati da usare nelle esportazioni.",
-        "icon_label": "SQL",
-        "technical_route": "/ui/views",
-    },
-    {
-        "id": "sync",
-        "order": "04",
-        "title": "Sincronizzazione",
-        "description": "Collega viste e tabelle BigQuery tramite pipeline.",
-        "icon_label": "SYNC",
-        "technical_route": "/ui/pipelines",
-    },
-    {
-        "id": "schedule",
-        "order": "05",
-        "title": "Pianificazione",
-        "description": "Configura quando eseguire le pipeline in automatico.",
-        "icon_label": "CRON",
-        "technical_route": "/ui/schedules",
-    },
-    {
-        "id": "access",
-        "order": "06",
-        "title": "Accessi dati clienti",
-        "description": "Definisci i filtri ACL per limitare la visibilita dati.",
-        "icon_label": "ACL",
-        "technical_route": "/ui/acl",
-    },
-    {
-        "id": "looker",
-        "order": "07",
-        "title": "Looker Studio",
-        "description": "Genera query sicure per la visualizzazione per utente.",
-        "icon_label": "BI",
-        "technical_route": "/ui/acl",
-    },
-    {
-        "id": "monitoring",
-        "order": "08",
-        "title": "Monitoraggio e alert",
-        "description": "Controlla esecuzioni, esiti e alert operativi.",
-        "icon_label": "OPS",
-        "technical_route": "/ui/monitoring",
-    },
-]
 
 
 def _redirect(
@@ -396,6 +332,108 @@ def _is_admin(user: AppUser | None) -> bool:
     return bool(user and user.role == ROLE_ADMIN)
 
 
+def _wizard_step_count(wizard: dict[str, object]) -> int:
+    steps = wizard.get("steps")
+    if not isinstance(steps, list):
+        return 0
+    return len(steps)
+
+
+def _clamp_step_index(index: int, steps_count: int) -> int:
+    if steps_count <= 0:
+        return 0
+    return max(0, min(index, steps_count - 1))
+
+
+def _wizard_session_store(request: Request) -> dict[str, object]:
+    session = request.scope.get("session")
+    if not isinstance(session, dict):
+        return {}
+    raw = session.get(WIZARD_DRAFTS_SESSION_KEY)
+    if isinstance(raw, dict):
+        return raw
+    payload: dict[str, object] = {}
+    session[WIZARD_DRAFTS_SESSION_KEY] = payload
+    return payload
+
+
+def _wizard_load_draft(request: Request, wizard_id: str) -> dict[str, object]:
+    store = _wizard_session_store(request)
+    raw = store.get(wizard_id)
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _wizard_save_draft(request: Request, wizard_id: str, draft_data: dict[str, object]) -> None:
+    session = request.scope.get("session")
+    if not isinstance(session, dict):
+        return
+    store = _wizard_session_store(request)
+    store[wizard_id] = dict(draft_data)
+    session[WIZARD_DRAFTS_SESSION_KEY] = store
+
+
+def _wizard_extract_step_payload(step: dict[str, object], form_data: dict[str, str]) -> dict[str, str]:
+    step_type = str(step.get("type") or "").strip().lower()
+    payload: dict[str, str] = {}
+
+    fields = step.get("fields")
+    if isinstance(fields, list):
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            field_id = str(field.get("id") or "").strip()
+            if not field_id:
+                continue
+            value = str(form_data.get(f"field__{field_id}", "")).strip()
+            if value:
+                payload[field_id] = value
+
+    if step_type == "choice":
+        choice_value = str(form_data.get("choice_value", "")).strip()
+        if choice_value:
+            payload["value"] = choice_value
+
+    return payload
+
+
+def _wizard_render_context(
+    *,
+    wizard: dict[str, object],
+    step_index: int,
+    draft_data: dict[str, object],
+) -> dict[str, object]:
+    steps = wizard.get("steps")
+    if not isinstance(steps, list):
+        steps = []
+    steps_count = len(steps)
+    safe_index = _clamp_step_index(step_index, steps_count)
+    current_step = steps[safe_index] if steps_count else {}
+    current_step_id = ""
+    if isinstance(current_step, dict):
+        current_step_id = str(current_step.get("id") or "")
+
+    current_payload = draft_data.get(current_step_id)
+    if not isinstance(current_payload, dict):
+        current_payload = {}
+
+    progress = int(((safe_index + 1) / steps_count) * 100) if steps_count else 0
+    step_marker = f"Passo {safe_index + 1} di {steps_count}" if steps_count else "Passi non disponibili"
+    return {
+        "steps": steps,
+        "steps_count": steps_count,
+        "step_index": safe_index,
+        "current_step": current_step,
+        "current_step_id": current_step_id,
+        "current_payload": current_payload,
+        "progress": progress,
+        "step_marker": step_marker,
+        "has_previous": safe_index > 0,
+        "has_next": safe_index < (steps_count - 1),
+    }
+
+
 def _wizard_status_from_progress(progress: int, has_issue: bool = False) -> tuple[str, str, str]:
     if has_issue:
         return "action_required", "Da risolvere", "danger"
@@ -500,8 +538,25 @@ def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
         if run_total > 0
         else "Nessun run registrato finora."
     )
+    full_progress = int(
+        (
+            sap_progress
+            + bq_progress
+            + data_progress
+            + sync_progress
+            + schedule_progress
+            + access_progress
+            + looker_progress
+            + monitoring_progress
+        )
+        / 8
+    )
+    full_summary = (
+        f"Completamento complessivo stimato: {full_progress}% (SAP->BigQuery->Looker)."
+    )
 
     progress_map = {
+        "full": (full_progress, run_error, full_summary),
         "sap": (sap_progress, False, sap_summary),
         "bigquery": (bq_progress, False, bq_summary),
         "data": (data_progress, False, data_summary),
@@ -513,7 +568,7 @@ def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
     }
 
     cards: list[dict[str, str | int]] = []
-    for raw in WIZARD_DEFINITIONS:
+    for raw in list_wizard_card_definitions():
         progress, has_issue, summary = progress_map.get(raw["id"], (0, False, "Non configurata."))
         status, status_label, status_class = _wizard_status_from_progress(progress, has_issue)
         cards.append(
@@ -531,11 +586,11 @@ def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
     return cards
 
 
-def _wizard_definition_by_id(wizard_id: str) -> dict[str, str] | None:
-    for row in WIZARD_DEFINITIONS:
-        if row["id"] == wizard_id:
-            return row
-    return None
+def _wizard_definition_by_id(wizard_id: str) -> dict[str, object] | None:
+    row = get_wizard_definition(wizard_id)
+    if not row:
+        return None
+    return row
 
 
 def _load_setting(db: Session, key: str, default: str = "") -> str:
@@ -880,34 +935,97 @@ def ui_configurations(
 
 
 @router.get("/ui/wizard/{wizard_id}", response_class=HTMLResponse)
-def ui_wizard_stub(
+def ui_wizard(
     wizard_id: str,
     request: Request,
     db: Session = Depends(get_db),
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
+    step: int = Query(default=0),
 ) -> HTMLResponse:
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
 
     cards = _build_wizard_cards(db)
-    card = next((c for c in cards if c["id"] == wizard_id), None)
-    if not card:
+    card = next((c for c in cards if str(c["id"]) == wizard_id), None)
+    if card is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non disponibile.")
+
+    draft_data = _wizard_load_draft(request, wizard_id)
+    wizard_ctx = _wizard_render_context(wizard=row, step_index=step, draft_data=draft_data)
 
     return templates.TemplateResponse(
         request=request,
-        name="wizard_stub.html",
+        name="wizard.html",
         context={
             "app_name": settings.app_name,
             "active_nav": "configurations",
             "wizard": card,
-            "technical_route": row["technical_route"],
+            "wizard_meta": row,
+            "technical_route": card["technical_route"],
+            "draft_data": draft_data,
+            **wizard_ctx,
             "message": message,
             "error": error,
         },
     )
+
+
+@router.post("/ui/wizard/{wizard_id}")
+async def ui_wizard_action(
+    wizard_id: str,
+    request: Request,
+) -> RedirectResponse:
+    row = _wizard_definition_by_id(wizard_id)
+    if row is None:
+        return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
+
+    form = await request.form()
+    action = str(form.get("action", "continue")).strip().lower()
+    try:
+        step_index = int(str(form.get("step_index", "0")).strip() or "0")
+    except ValueError:
+        step_index = 0
+
+    steps_count = _wizard_step_count(row)
+    step_index = _clamp_step_index(step_index, steps_count)
+    steps = row.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return _redirect("/ui/wizard/" + wizard_id, error="Wizard non configurato.")
+
+    current_step = steps[step_index]
+    if not isinstance(current_step, dict):
+        return _redirect("/ui/wizard/" + wizard_id, error="Step wizard non valido.")
+
+    form_data: dict[str, str] = {}
+    for key, value in form.items():
+        form_data[str(key)] = str(value)
+
+    draft_data = _wizard_load_draft(request, wizard_id)
+    step_payload = _wizard_extract_step_payload(current_step, form_data)
+    current_step_id = str(current_step.get("id") or f"step_{step_index}")
+    if step_payload:
+        draft_data[current_step_id] = step_payload
+        _wizard_save_draft(request, wizard_id, draft_data)
+
+    if action == "back":
+        new_step = _clamp_step_index(step_index - 1, steps_count)
+        return _redirect(f"/ui/wizard/{wizard_id}?step={new_step}")
+
+    if action == "save":
+        return _redirect(
+            f"/ui/wizard/{wizard_id}?step={step_index}",
+            message="Bozza wizard salvata.",
+        )
+
+    new_step = _clamp_step_index(step_index + 1, steps_count)
+    if step_index >= steps_count - 1:
+        return _redirect(
+            f"/ui/wizard/{wizard_id}?step={step_index}",
+            message="Wizard completato. Puoi procedere con la configurazione tecnica.",
+        )
+    return _redirect(f"/ui/wizard/{wizard_id}?step={new_step}")
 
 
 @router.get("/ui/summaries", response_class=HTMLResponse)

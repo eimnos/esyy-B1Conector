@@ -356,6 +356,117 @@ body {
   gap: 10px;
 }
 
+.wizard-steps-line {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.wizard-step-item {
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  padding: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 4px;
+}
+
+.wizard-step-item span {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.wizard-step-item small {
+  font-size: 11px;
+  color: #475569;
+}
+
+.wizard-step-item.current {
+  border-color: #9eb9ad;
+  background: #f2f7f4;
+}
+
+.wizard-step-item.current span {
+  border-color: #8ba798;
+  color: #ffffff;
+  background: var(--ui-accent);
+}
+
+.wizard-step-item.done span {
+  border-color: #8ab89e;
+  color: #ffffff;
+  background: #3f7f5e;
+}
+
+.wizard-question {
+  font-size: 15px;
+  margin: 8px 0 4px;
+  color: #111827;
+}
+
+.wizard-choice-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wizard-choice-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #ffffff;
+}
+
+.wizard-choice-item input {
+  width: auto;
+  margin: 0;
+}
+
+.wizard-instruction-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.wizard-review-box {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.wizard-review-item {
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: #fbfcfc;
+  padding: 8px;
+}
+
+.wizard-review-item pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--esyy-font-mono);
+  font-size: 12px;
+}
+
+.wizard-actions-spaced {
+  margin-top: 14px;
+  justify-content: space-between;
+}
+
 .btn.primary {
   background: linear-gradient(150deg, var(--ui-accent-strong) 0%, var(--ui-accent) 100%);
   border-color: var(--ui-accent-strong);

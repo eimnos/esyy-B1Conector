@@ -1934,3 +1934,82 @@ Note:
 
 - non sono state rimosse route tecniche esistenti (`/ui/views`, `/ui/pipelines`, `/ui/schedules`, `/ui/acl`, `/ui/settings`)
 - nessuna modifica al motore di pipeline, ACL o scheduler.
+
+### 2026-05-01 - Wizard reali base (Sprint 3 strutturale)
+
+Obiettivo:
+
+- passare da pagine finali a struttura wizard a step, mantenendo grafica/layout gia approvati.
+
+Implementazione:
+
+1) Definizioni wizard centralizzate
+- nuovo file: `software_mvp/app/services/wizard_definitions.py`
+- introdotte definizioni per wizard:
+  - `full`
+  - `sap`
+  - `bigquery`
+  - `data`
+  - `sync`
+  - `schedule`
+  - `access`
+  - `looker`
+  - `monitoring`
+- ogni wizard include:
+  - `id`, `title`, `subtitle`, `steps`
+- ogni step include struttura pronta con:
+  - `id`, `title`, `type`, `question`, `description`
+  - `fields` e/o `options` quando necessario
+- supportati tipi step:
+  - `intro`, `choice`, `input`, `two_inputs`, `credentials`, `instruction`, `test`, `review`
+
+2) Route wizard reale
+- aggiornato file: `software_mvp/app/ui_routes.py`
+- route GET:
+  - `GET /ui/wizard/{wizard_id}`
+  - render singolo step con indice `?step=`
+- route POST:
+  - `POST /ui/wizard/{wizard_id}`
+  - azioni supportate:
+    - `back` (Indietro)
+    - `save` (Salva bozza)
+    - `continue` (Conferma e continua)
+
+3) Persistenza minimale draft_data
+- aggiunta gestione bozza in sessione (`wizard_drafts`)
+- per ogni wizard vengono salvati i valori step-by-step
+- struttura pronta per futura persistenza su DB
+
+4) Template wizard sequenziale
+- nuovo file: `software_mvp/app/templates/wizard.html`
+- mostra un solo step alla volta
+- componenti principali:
+  - header wizard (titolo/sottotitolo)
+  - progress + marker passo
+  - stepper orizzontale
+  - form dinamico per tipo step
+  - pulsanti: `Indietro`, `Salva bozza`, `Conferma e continua`
+  - box review con `draft_data`
+
+5) Integrazione configurazioni esistenti
+- la pagina Configurazioni continua a usare card e route `/ui/wizard/{id}`
+- `full` reso disponibile come wizard reale dimostrativo
+- wizard `sap` disponibile con flusso completo a step
+
+6) Stile coerente con UI attuale
+- aggiornato: `software_mvp/app/static/css/esyy-ui.css`
+- aggiunte classi dedicate a:
+  - stepper
+  - choice cards
+  - instruction list
+  - review box
+  - azioni wizard
+
+Verifiche:
+
+- `python -m py_compile software_mvp\app\ui_routes.py software_mvp\app\services\wizard_definitions.py` -> OK
+
+Note:
+
+- non e stata modificata la logica business di Views/Pipelines/Schedules/ACL.
+- il wizard raccoglie bozza dati e prepara la fase di collegamento alla persistenza completa.
