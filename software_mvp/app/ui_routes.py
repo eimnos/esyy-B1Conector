@@ -357,20 +357,61 @@ def _wizard_session_store(request: Request) -> dict[str, object]:
     return payload
 
 
-def _wizard_load_draft(request: Request, wizard_id: str) -> dict[str, object]:
+def _wizard_load_draft_entry(request: Request, wizard_id: str) -> dict[str, object]:
     store = _wizard_session_store(request)
     raw = store.get(wizard_id)
-    if isinstance(raw, dict):
-        return dict(raw)
-    return {}
+    if not isinstance(raw, dict):
+        return {"data": {}, "updated_at": None}
+
+    if "data" in raw and isinstance(raw.get("data"), dict):
+        return {
+            "data": dict(raw.get("data") or {}),
+            "updated_at": raw.get("updated_at"),
+            "step_index": raw.get("step_index"),
+        }
+
+    # backward compatibility: old payload contained only step data
+    legacy_data = dict(raw)
+    return {"data": legacy_data, "updated_at": None}
 
 
-def _wizard_save_draft(request: Request, wizard_id: str, draft_data: dict[str, object]) -> None:
+def _wizard_load_draft(request: Request, wizard_id: str) -> dict[str, object]:
+    entry = _wizard_load_draft_entry(request, wizard_id)
+    data = entry.get("data")
+    if not isinstance(data, dict):
+        return {}
+    return dict(data)
+
+
+def _wizard_draft_updated_at(request: Request, wizard_id: str) -> datetime | None:
+    entry = _wizard_load_draft_entry(request, wizard_id)
+    raw = entry.get("updated_at")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+
+
+def _wizard_save_draft(
+    request: Request,
+    wizard_id: str,
+    draft_data: dict[str, object],
+    *,
+    step_index: int | None = None,
+) -> None:
     session = request.scope.get("session")
     if not isinstance(session, dict):
         return
     store = _wizard_session_store(request)
-    store[wizard_id] = dict(draft_data)
+    payload: dict[str, object] = {
+        "data": dict(draft_data),
+        "updated_at": datetime.utcnow().isoformat(timespec="seconds"),
+    }
+    if step_index is not None:
+        payload["step_index"] = step_index
+    store[wizard_id] = payload
     session[WIZARD_DRAFTS_SESSION_KEY] = store
 
 
@@ -434,143 +475,109 @@ def _wizard_render_context(
     }
 
 
-def _wizard_status_from_progress(progress: int, has_issue: bool = False) -> tuple[str, str, str]:
-    if has_issue:
-        return "action_required", "Da risolvere", "danger"
-    if progress >= 100:
-        return "completed", "Completata", "success"
-    if progress >= 45:
-        return "in_progress", "In corso", "warning"
-    return "not_configured", "Da configurare", "neutral"
+def _wizard_status_from_draft_progress(progress: int) -> tuple[str, str, str]:
+    if progress <= 0:
+        return "not_configured", "Da configurare", "neutral"
+    return "draft", "Bozza", "warning"
 
 
-def _wizard_action_label(status: str) -> str:
-    if status == "completed":
-        return "Modifica"
-    if status == "action_required":
-        return "Risolvi"
-    return "Configura"
+def _fmt_last_updated(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.strftime("%d/%m/%Y %H:%M")
 
 
-def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
-    sql_conn = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY).strip()
-    hana_conn = _load_setting(db, HANA_CONN_STR_SETTING_KEY).strip()
-    source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower()
+def _wizard_real_last_update(db: Session, wizard_id: str) -> datetime | None:
+    points: list[datetime] = []
 
-    bq_project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
-    bq_dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
-    bq_creds = _load_setting(db, BQ_CREDENTIALS_FILE_SETTING_KEY, default=settings.bq_credentials_file).strip()
+    def _push(value: datetime | None) -> None:
+        if value is not None:
+            points.append(value)
 
-    views_total = db.query(func.count(ReportView.id)).scalar() or 0
-    views_active = db.query(func.count(ReportView.id)).filter(ReportView.is_active.is_(True)).scalar() or 0
-    pipelines_total = db.query(func.count(Pipeline.id)).scalar() or 0
-    pipelines_active = db.query(func.count(Pipeline.id)).filter(Pipeline.is_active.is_(True)).scalar() or 0
-    schedules_total = db.query(func.count(Schedule.id)).scalar() or 0
-    schedules_active = db.query(func.count(Schedule.id)).filter(Schedule.is_active.is_(True)).scalar() or 0
-    acl_rules_active = db.query(func.count(ACLRule.id)).filter(ACLRule.is_active.is_(True)).scalar() or 0
-    acl_filters_active = (
-        db.query(func.count(ACLFilterRule.id))
-        .filter(ACLFilterRule.is_active.is_(True))
-        .scalar()
-        or 0
-    )
-    run_total = db.query(func.count(RunLog.id)).scalar() or 0
-    last_run = db.query(RunLog).order_by(RunLog.id.desc()).first()
-    last_run_status = (last_run.status or "").strip().upper() if last_run else ""
-    run_error = bool(last_run and last_run_status and last_run_status != "OK")
-
-    if source_db_engine == "hana":
-        sap_connected = bool(hana_conn)
-        sap_summary = "Motore HANA configurato." if hana_conn else "Connessione HANA non configurata."
-    else:
-        sap_connected = bool(sql_conn)
-        sap_summary = "Motore SQL Server configurato." if sql_conn else "Connessione SQL Server non configurata."
-    if not sap_connected and (sql_conn or hana_conn):
-        sap_summary = "Connessione presente ma non allineata al motore selezionato."
-    sap_progress = 100 if sap_connected else (35 if (sql_conn or hana_conn) else 0)
-
-    bq_parts = int(bool(bq_project)) + int(bool(bq_dataset)) + int(bool(bq_creds))
-    bq_progress = int((bq_parts / 3) * 100)
-    if bq_parts == 3:
-        bq_summary = f"{bq_project}.{bq_dataset}"
-    else:
-        bq_summary = f"Completati {bq_parts}/3 campi (project, dataset, credenziali)."
-
-    data_progress = 100 if views_active > 0 else (40 if views_total > 0 else 0)
-    data_summary = f"View attive: {views_active} su {views_total}."
-
-    sync_progress = 100 if pipelines_active > 0 else (50 if pipelines_total > 0 else 0)
-    sync_has_issue = pipelines_active > 0 and run_error
-    if pipelines_total == 0:
-        sync_summary = "Nessuna pipeline configurata."
-    elif pipelines_active == 0:
-        sync_summary = f"Pipelines presenti: {pipelines_total}, ma nessuna attiva."
-    else:
-        sync_summary = f"Pipelines attive: {pipelines_active} su {pipelines_total}."
-
-    schedule_progress = 100 if schedules_active > 0 else (35 if schedules_total > 0 else 0)
-    if schedules_total == 0:
-        schedule_summary = "Nessuna pianificazione configurata."
-    elif schedules_active == 0:
-        schedule_summary = "Schedulazioni presenti ma non attive."
-    else:
-        schedule_summary = f"Schedulazioni attive: {schedules_active}."
-
-    access_items = acl_filters_active + acl_rules_active
-    access_progress = 100 if access_items > 0 else 0
-    access_summary = (
-        f"Regole ACL attive: {acl_rules_active} classiche, {acl_filters_active} filtri."
-        if access_items > 0
-        else "Nessuna regola ACL attiva."
-    )
-
-    looker_prereq = int(views_active > 0) + int(pipelines_active > 0) + int(access_items > 0)
-    looker_progress = int((looker_prereq / 3) * 100)
-    looker_summary = (
-        "Prerequisiti completati: view + pipeline + ACL."
-        if looker_prereq == 3
-        else f"Prerequisiti completati: {looker_prereq}/3."
-    )
-
-    monitoring_progress = 100 if run_total > 0 else 30
-    monitoring_summary = (
-        f"Ultimo run: stato {last_run_status or 'N/D'}."
-        if run_total > 0
-        else "Nessun run registrato finora."
-    )
-    full_progress = int(
-        (
-            sap_progress
-            + bq_progress
-            + data_progress
-            + sync_progress
-            + schedule_progress
-            + access_progress
-            + looker_progress
-            + monitoring_progress
+    if wizard_id == "sap":
+        _push(
+            db.query(func.max(AppSetting.updated_at))
+            .filter(AppSetting.key.in_([SQLSERVER_CONN_STR_SETTING_KEY, HANA_CONN_STR_SETTING_KEY, SOURCE_DB_ENGINE_SETTING_KEY]))
+            .scalar()
         )
-        / 8
-    )
-    full_summary = (
-        f"Completamento complessivo stimato: {full_progress}% (SAP->BigQuery->Looker)."
-    )
+    elif wizard_id == "bigquery":
+        _push(
+            db.query(func.max(AppSetting.updated_at))
+            .filter(
+                AppSetting.key.in_(
+                    [
+                        BQ_PROJECT_ID_SETTING_KEY,
+                        BQ_DATASET_SETTING_KEY,
+                        BQ_LOCATION_SETTING_KEY,
+                        BQ_CREDENTIALS_FILE_SETTING_KEY,
+                    ]
+                )
+            )
+            .scalar()
+        )
+    elif wizard_id == "data":
+        _push(db.query(func.max(ReportView.updated_at)).scalar())
+    elif wizard_id == "sync":
+        _push(db.query(func.max(Pipeline.updated_at)).scalar())
+    elif wizard_id == "schedule":
+        _push(db.query(func.max(Schedule.updated_at)).scalar())
+    elif wizard_id == "access":
+        _push(db.query(func.max(ACLRule.updated_at)).scalar())
+        _push(db.query(func.max(ACLFilterRule.updated_at)).scalar())
+    elif wizard_id == "looker":
+        _push(db.query(func.max(ACLFilterRule.updated_at)).scalar())
+        _push(db.query(func.max(Pipeline.updated_at)).scalar())
+    elif wizard_id == "monitoring":
+        _push(db.query(func.max(RunLog.created_at)).scalar())
+    elif wizard_id == "full":
+        for wid in ("sap", "bigquery", "data", "sync", "schedule", "access", "looker", "monitoring"):
+            _push(_wizard_real_last_update(db, wid))
 
-    progress_map = {
-        "full": (full_progress, run_error, full_summary),
-        "sap": (sap_progress, False, sap_summary),
-        "bigquery": (bq_progress, False, bq_summary),
-        "data": (data_progress, False, data_summary),
-        "sync": (sync_progress, sync_has_issue, sync_summary),
-        "schedule": (schedule_progress, False, schedule_summary),
-        "access": (access_progress, False, access_summary),
-        "looker": (looker_progress, False, looker_summary),
-        "monitoring": (monitoring_progress, run_error, monitoring_summary),
-    }
+    if not points:
+        return None
+    return max(points)
 
+
+def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | int]]:
     cards: list[dict[str, str | int]] = []
     for raw in list_wizard_card_definitions():
-        progress, has_issue, summary = progress_map.get(raw["id"], (0, False, "Non configurata."))
-        status, status_label, status_class = _wizard_status_from_progress(progress, has_issue)
+        wizard_id = str(raw.get("id") or "").strip()
+        wizard_def = get_wizard_definition(wizard_id) or {}
+        steps_raw = wizard_def.get("steps")
+        steps = steps_raw if isinstance(steps_raw, list) else []
+        steps_count = len(steps)
+
+        draft_data = _wizard_load_draft(request, wizard_id)
+        completed_steps = 0
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            step_id = str(step.get("id") or "").strip()
+            if not step_id:
+                continue
+            payload = draft_data.get(step_id)
+            if isinstance(payload, dict) and payload:
+                completed_steps += 1
+
+        progress = int((completed_steps / steps_count) * 100) if steps_count > 0 else 0
+        draft_updated = _wizard_draft_updated_at(request, wizard_id)
+        status, status_label, status_class = _wizard_status_from_draft_progress(progress)
+        if progress == 0 and draft_updated is not None:
+            status, status_label, status_class = ("draft", "Bozza", "warning")
+
+        if wizard_id == "full":
+            summary = "Percorso guidato unico per configurare tutto da zero."
+        elif progress <= 0:
+            summary = "Nessuna bozza wizard salvata."
+        else:
+            summary = f"Bozza in corso: {completed_steps}/{steps_count} step compilati."
+
+        real_updated = _wizard_real_last_update(db, wizard_id)
+        last_updated = draft_updated or real_updated
+        last_updated_text = _fmt_last_updated(last_updated) or "n/d"
+
+        action_label = "Avvia setup completo" if wizard_id == "full" else "Apri wizard"
+
         cards.append(
             {
                 **raw,
@@ -579,8 +586,12 @@ def _build_wizard_cards(db: Session) -> list[dict[str, str | int]]:
                 "status_label": status_label,
                 "status_class": status_class,
                 "summary": summary,
-                "route": f"/ui/wizard/{raw['id']}",
-                "action_label": _wizard_action_label(status),
+                "route": f"/ui/wizard/{wizard_id}",
+                "action_label": action_label,
+                "last_updated": last_updated_text,
+                "has_last_updated": bool(last_updated),
+                "steps_count": steps_count,
+                "completed_steps": completed_steps,
             }
         )
     return cards
@@ -915,19 +926,23 @@ def ui_configurations(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> HTMLResponse:
-    cards = _build_wizard_cards(db)
-    completed = sum(1 for c in cards if c["status"] == "completed")
-    action_required = sum(1 for c in cards if c["status"] == "action_required")
+    cards = _build_wizard_cards(request, db)
+    full_card = next((c for c in cards if str(c.get("id")) == "full"), None)
+    wizard_cards = [c for c in cards if str(c.get("id")) != "full"]
+    drafts_count = sum(1 for c in wizard_cards if c["status"] == "draft")
+    pending_count = sum(1 for c in wizard_cards if c["status"] == "not_configured")
+
     return templates.TemplateResponse(
         request=request,
         name="configurations.html",
         context={
             "app_name": settings.app_name,
             "active_nav": "configurations",
-            "wizard_cards": cards,
-            "completed_count": completed,
-            "total_count": len(cards),
-            "action_required_count": action_required,
+            "full_card": full_card,
+            "wizard_cards": wizard_cards,
+            "drafts_count": drafts_count,
+            "pending_count": pending_count,
+            "total_count": len(wizard_cards),
             "message": message,
             "error": error,
         },
@@ -947,7 +962,7 @@ def ui_wizard(
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
 
-    cards = _build_wizard_cards(db)
+    cards = _build_wizard_cards(request, db)
     card = next((c for c in cards if str(c["id"]) == wizard_id), None)
     if card is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non disponibile.")
@@ -1007,7 +1022,8 @@ async def ui_wizard_action(
     current_step_id = str(current_step.get("id") or f"step_{step_index}")
     if step_payload:
         draft_data[current_step_id] = step_payload
-        _wizard_save_draft(request, wizard_id, draft_data)
+    if action in {"save", "continue"}:
+        _wizard_save_draft(request, wizard_id, draft_data, step_index=step_index)
 
     if action == "back":
         new_step = _clamp_step_index(step_index - 1, steps_count)

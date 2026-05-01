@@ -32,7 +32,7 @@ WIZARD_CARD_DEFINITIONS: list[dict[str, str]] = [
     {
         "id": "data",
         "order": "03",
-        "title": "Dati SAP da esportare",
+        "title": "Dati da esportare",
         "description": "Definisci le viste dati da usare nelle esportazioni.",
         "icon_label": "SQL",
         "technical_route": "/ui/views",
@@ -549,4 +549,3 @@ def get_wizard_definition(wizard_id: str) -> dict[str, Any] | None:
     if not payload:
         return None
     return deepcopy(payload)
-

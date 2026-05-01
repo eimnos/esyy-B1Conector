@@ -2013,3 +2013,74 @@ Note:
 
 - non e stata modificata la logica business di Views/Pipelines/Schedules/ACL.
 - il wizard raccoglie bozza dati e prepara la fase di collegamento alla persistenza completa.
+
+### 2026-05-01 - Configurazioni collegate ai wizard reali (hub wizard)
+
+Obiettivo:
+
+- trasformare `/ui/configurations` in hub wizard puro, con accesso prioritario al setup completo e apertura dei wizard singoli.
+
+Implementazione:
+
+1) Hub Configurazioni aggiornato
+- file: `software_mvp/app/templates/configurations.html`
+- nuova struttura:
+  - card speciale in alto: **Configurazione completa da zero**
+    - CTA: `Avvia setup completo`
+    - link: `/ui/wizard/full`
+  - sotto: 8 card wizard singole
+    - `sap`, `bigquery`, `data`, `sync`, `schedule`, `access`, `looker`, `monitoring`
+- ogni card mostra:
+  - titolo
+  - descrizione breve
+  - stato wizard
+  - percentuale completamento
+  - ultimo aggiornamento
+  - CTA unica: `Apri wizard`
+
+2) Rimozione CTA tecniche in Configurazioni
+- dalla pagina `/ui/configurations` rimosse CTA tecniche verso:
+  - Views
+  - Pipelines
+  - Schedules
+  - ACL
+  - Settings raw
+- mantenuto paradigma: pagine tecniche accessibili da `Avanzate`.
+
+3) Stato wizard basato su bozza (no "Completato" fittizio)
+- file: `software_mvp/app/ui_routes.py`
+- `/_build_wizard_cards(...)` aggiornato:
+  - progress basato su step compilati del wizard draft
+  - stato calcolato come:
+    - `Da configurare` se non iniziato
+    - `Bozza` se presente avanzamento bozza
+  - non viene usato stato `Completato` per wizard non persistiti realmente
+
+4) Persistenza bozza sessione estesa
+- file: `software_mvp/app/ui_routes.py`
+- store sessione wizard aggiornato con metadati:
+  - `data`
+  - `updated_at`
+  - `step_index`
+- supporto backward compatibility con bozze legacy.
+
+5) Ultimo aggiornamento card
+- `last_updated` derivato da:
+  - timestamp bozza wizard (prioritario)
+  - fallback su ultimo aggiornamento tecnico reale correlato (se presente)
+
+6) Allineamento card definitions
+- file: `software_mvp/app/services/wizard_definitions.py`
+- titolo card `data` aggiornato a **Dati da esportare** (coerente con specifica).
+
+7) Coerenza navigazione wizard
+- file: `software_mvp/app/templates/wizard.html`
+- rimossa CTA diretta verso pagina tecnica dal footer wizard.
+
+8) Stile
+- file: `software_mvp/app/static/css/esyy-ui.css`
+- aggiunti stili per card full e blocco ultimo aggiornamento.
+
+Verifica:
+
+- `python -m py_compile software_mvp\app\ui_routes.py software_mvp\app\services\wizard_definitions.py` -> OK

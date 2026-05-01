@@ -209,6 +209,11 @@ body {
   gap: 10px;
 }
 
+.wizard-card-full {
+  border-color: #b8cdc2;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbf9 100%);
+}
+
 .wizard-card-head {
   display: flex;
   align-items: center;
@@ -311,6 +316,10 @@ body {
   margin: 0;
   font-size: 13px;
   color: #1f2937;
+}
+
+.wizard-updated {
+  font-size: 12px;
 }
 
 .wizard-progress-row {

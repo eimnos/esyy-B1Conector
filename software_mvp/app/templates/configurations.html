@@ -2,16 +2,47 @@
 {% block body %}
 <div class="section">
   <h2>Configurazioni guidate</h2>
-  <p class="muted">Completa i passaggi in ordine. I dettagli tecnici restano disponibili in Avanzate.</p>
+  <p class="muted">Questa pagina e l'hub wizard. Le pagine tecniche restano disponibili in Avanzate.</p>
   <div class="wizard-summary-bar">
-    <span><strong>{{ completed_count }}/{{ total_count }}</strong> configurazioni completate</span>
-    {% if action_required_count > 0 %}
-      <span class="wizard-chip chip-danger">{{ action_required_count }} da risolvere</span>
-    {% else %}
-      <span class="wizard-chip chip-success">Nessun blocco aperto</span>
-    {% endif %}
+    <span><strong>{{ total_count }}</strong> wizard disponibili</span>
+    <span class="wizard-chip chip-warning">{{ drafts_count }} in bozza</span>
+    <span class="wizard-chip chip-neutral">{{ pending_count }} da configurare</span>
   </div>
 </div>
+
+{% if full_card %}
+<div class="section">
+  <article class="wizard-card wizard-card-full">
+    <div class="wizard-card-head">
+      <div class="wizard-order">{{ full_card.order }}</div>
+      <span class="wizard-chip chip-{{ full_card.status_class }}">{{ full_card.status_label }}</span>
+    </div>
+
+    <div class="wizard-title-row">
+      <div class="wizard-icon">{{ full_card.icon_label }}</div>
+      <div>
+        <h3 class="wizard-title">Configurazione completa da zero</h3>
+        <p class="wizard-description">{{ full_card.description }}</p>
+      </div>
+    </div>
+
+    <p class="wizard-summary">{{ full_card.summary }}</p>
+    <div class="wizard-progress-row">
+      <div class="wizard-progress">
+        <span style="width: {{ full_card.progress }}%"></span>
+      </div>
+      <span class="wizard-progress-value">{{ full_card.progress }}%</span>
+    </div>
+    <div class="wizard-updated muted">
+      Ultimo aggiornamento: {{ full_card.last_updated }}
+    </div>
+
+    <div class="wizard-actions">
+      <a href="/ui/wizard/full" class="btn primary">Avvia setup completo</a>
+    </div>
+  </article>
+</div>
+{% endif %}
 
 <div class="wizard-grid">
   {% for w in wizard_cards %}
@@ -37,10 +68,12 @@
       </div>
       <span class="wizard-progress-value">{{ w.progress }}%</span>
     </div>
+    <div class="wizard-updated muted">
+      Ultimo aggiornamento: {{ w.last_updated }}
+    </div>
 
     <div class="wizard-actions">
-      <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }} con wizard</a>
-      <a href="{{ w.technical_route }}" class="btn secondary btn-xs">Dettagli tecnici</a>
+      <a href="{{ w.route }}" class="btn primary btn-xs">Apri wizard</a>
     </div>
   </article>
   {% endfor %}
