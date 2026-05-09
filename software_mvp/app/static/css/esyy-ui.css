@@ -476,6 +476,111 @@ body {
   justify-content: space-between;
 }
 
+.wizard-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.wizard-modal {
+  width: min(1060px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  background: var(--ui-card-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wizard-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid var(--ui-border);
+  background: #fbfcfc;
+}
+
+.wizard-modal-header .wizard-icon-lg {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  font-size: 10px;
+}
+
+.wizard-modal-header h2 {
+  margin: 0;
+}
+
+.wizard-modal-progress {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ui-border);
+  background: #ffffff;
+}
+
+.wizard-modal-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.wizard-modal-body .section {
+  padding: 10px;
+  margin: 0;
+  box-shadow: none;
+}
+
+.wizard-steps-line {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.wizard-step-item {
+  min-width: 136px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  gap: 3px;
+}
+
+.wizard-step-item small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wizard-question {
+  margin: 4px 0 2px;
+  font-size: 14px;
+}
+
+.wizard-form .row {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wizard-actions-spaced {
+  position: sticky;
+  bottom: -10px;
+  margin-top: 10px;
+  padding-top: 8px;
+  padding-bottom: 2px;
+  background: linear-gradient(to top, var(--ui-main-bg) 72%, rgba(244, 246, 245, 0));
+}
+
 .btn.primary {
   background: linear-gradient(150deg, var(--ui-accent-strong) 0%, var(--ui-accent) 100%);
   border-color: var(--ui-accent-strong);
@@ -531,5 +636,48 @@ body {
 
   .wizard-progress-row-inline {
     grid-template-columns: 1fr;
+  }
+
+  .wizard-modal-overlay {
+    padding: 8px;
+  }
+
+  .wizard-modal {
+    width: 100%;
+    max-height: calc(100vh - 8px);
+  }
+
+  .wizard-modal-header,
+  .wizard-modal-progress,
+  .wizard-modal-body {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
+@media (max-height: 860px) {
+  .wizard-modal-overlay {
+    padding: 4px;
+  }
+
+  .wizard-modal {
+    max-height: calc(100vh - 8px);
+  }
+
+  .wizard-modal-header {
+    padding: 8px 10px 7px;
+  }
+
+  .wizard-modal-progress {
+    padding: 6px 10px;
+  }
+
+  .wizard-modal-body {
+    padding: 6px 10px 8px;
+    gap: 6px;
+  }
+
+  .wizard-modal-body .section {
+    padding: 8px;
   }
 }

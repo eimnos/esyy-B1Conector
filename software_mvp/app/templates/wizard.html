@@ -1,175 +1,340 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="section">
-  <div class="wizard-stub-head">
-    <div class="wizard-icon wizard-icon-lg">{{ wizard.icon_label }}</div>
-    <div>
-      <h2>{{ wizard.order }} - {{ wizard.title }}</h2>
-      <p class="muted">{{ wizard_meta.subtitle }}</p>
-    </div>
-  </div>
-  <div class="wizard-progress-row wizard-progress-row-inline">
-    <div class="wizard-progress">
-      <span style="width: {{ progress }}%"></span>
-    </div>
-    <span class="wizard-progress-value">{{ progress }}%</span>
-    <span class="wizard-chip chip-{{ wizard.status_class }}">{{ wizard.status_label }}</span>
-    <span class="muted">{{ step_marker }}</span>
-  </div>
-</div>
-
-<div class="section">
-  <div class="wizard-steps-line">
-    {% for s in steps %}
-      {% set step_class = "pending" %}
-      {% if loop.index0 < step_index %}
-        {% set step_class = "done" %}
-      {% elif loop.index0 == step_index %}
-        {% set step_class = "current" %}
-      {% endif %}
-      <div class="wizard-step-item {{ step_class }}">
-        <span>{{ loop.index }}</span>
-        <small>{{ s.title }}</small>
-      </div>
-    {% endfor %}
-  </div>
-</div>
-
-<div class="section">
-  <form method="post" action="/ui/wizard/{{ wizard.id }}" class="wizard-form">
-    <input type="hidden" name="step_index" value="{{ step_index }}">
-
-    <h3>{{ current_step.title }}</h3>
-    <p class="wizard-question">{{ current_step.question }}</p>
-    <p class="muted">{{ current_step.description }}</p>
-
-    {% set step_type = current_step.type %}
-
-    {% if step_type == "choice" %}
-      <div class="wizard-choice-list">
-        {% for opt in current_step.options %}
-          <label class="wizard-choice-item">
-            <input
-              type="radio"
-              name="choice_value"
-              value="{{ opt.value }}"
-              {% if current_payload.get("value", "") == opt.value %}checked{% endif %}
-            >
-            <span>{{ opt.label }}</span>
-          </label>
-        {% endfor %}
-      </div>
-
-    {% elif step_type == "input" %}
-      {% set field = current_step.fields[0] if current_step.fields else None %}
-      {% if field %}
+<style>
+  /* Fallback locale: garantisce la modale anche se il CSS statico e' in cache. */
+  .wizard-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.56);
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wizard-modal {
+    width: min(1060px, 96vw);
+    max-height: calc(100vh - 24px);
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid var(--ui-border, #d9e1dc);
+    background: var(--ui-card-bg, #ffffff);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .wizard-modal-header {
+    padding: 10px 12px 9px;
+    border-bottom: 1px solid var(--ui-border, #d9e1dc);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    background: #f8faf9;
+  }
+  .wizard-modal-header .wizard-icon-lg {
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
+    font-size: 10px;
+  }
+  .wizard-modal-header h2 {
+    margin: 0 0 2px;
+    line-height: 1.1;
+  }
+  .wizard-modal-header .muted {
+    margin: 0;
+  }
+  .wizard-modal-progress {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--ui-border, #d9e1dc);
+    background: #ffffff;
+  }
+  .wizard-modal-body {
+    overflow: auto;
+    padding: 8px 12px 10px;
+    background: var(--ui-main-bg, #f4f6f5);
+    display: grid;
+    gap: 8px;
+  }
+  .wizard-modal-body .section {
+    padding: 10px;
+    margin: 0;
+    box-shadow: none;
+  }
+  .wizard-modal-body h3 {
+    margin: 0 0 6px;
+  }
+  .wizard-modal-body .muted {
+    margin: 0;
+  }
+  .wizard-steps-line {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .wizard-step-item {
+    min-width: 136px;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    gap: 3px;
+  }
+  .wizard-step-item small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wizard-question {
+    margin: 4px 0 2px;
+    font-size: 14px;
+  }
+  .wizard-form .row {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .wizard-actions-spaced {
+    position: sticky;
+    bottom: -10px;
+    margin-top: 10px;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    background: linear-gradient(to top, var(--ui-main-bg, #f4f6f5) 72%, rgba(244, 246, 245, 0));
+  }
+  @media (max-width: 900px) {
+    .wizard-modal-overlay {
+      padding: 0;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .wizard-modal {
+      width: 100vw;
+      max-height: 100vh;
+      border-radius: 0;
+      border: 0;
+    }
+  }
+  @media (max-height: 860px) {
+    .wizard-modal {
+      max-height: calc(100vh - 8px);
+    }
+    .wizard-modal-overlay {
+      padding: 4px;
+    }
+    .wizard-modal-header {
+      padding: 8px 10px 7px;
+    }
+    .wizard-modal-progress {
+      padding: 6px 10px;
+    }
+    .wizard-modal-body {
+      padding: 6px 10px 8px;
+      gap: 6px;
+    }
+    .wizard-modal-body .section {
+      padding: 8px;
+    }
+  }
+</style>
+<div class="wizard-modal-overlay" data-wizard-modal-overlay>
+  <section class="wizard-modal" role="dialog" aria-modal="true" aria-labelledby="wizard-modal-title">
+    <header class="wizard-modal-header">
+      <div class="wizard-stub-head">
+        <div class="wizard-icon wizard-icon-lg">{{ wizard.icon_label }}</div>
         <div>
-          <label>{{ field.label }}</label>
-          <input
-            type="{{ field.input_type if field.input_type else 'text' }}"
-            name="field__{{ field.id }}"
-            value="{{ current_payload.get(field.id, '') }}"
-            placeholder="{{ field.placeholder if field.placeholder else '' }}"
-            {% if field.required %}required{% endif %}
-          >
+          <h2 id="wizard-modal-title">{{ wizard.order }} - {{ wizard.title }}</h2>
+          <p class="muted">{{ wizard_meta.subtitle }}</p>
         </div>
-      {% endif %}
-
-    {% elif step_type == "two_inputs" %}
-      <div class="row">
-        {% for field in current_step.fields %}
-          <div>
-            <label>{{ field.label }}</label>
-            <input
-              type="{{ field.input_type if field.input_type else 'text' }}"
-              name="field__{{ field.id }}"
-              value="{{ current_payload.get(field.id, '') }}"
-              placeholder="{{ field.placeholder if field.placeholder else '' }}"
-              {% if field.required %}required{% endif %}
-            >
-          </div>
-        {% endfor %}
       </div>
+      <a href="/ui/configurations" class="btn secondary btn-xs">Chiudi</a>
+    </header>
 
-    {% elif step_type == "credentials" %}
-      <div class="row">
-        {% for field in current_step.fields %}
-          <div>
-            <label>{{ field.label }}</label>
-            <input
-              type="{{ field.input_type if field.input_type else 'text' }}"
-              name="field__{{ field.id }}"
-              value="{{ current_payload.get(field.id, '') }}"
-              placeholder="{{ field.placeholder if field.placeholder else '' }}"
-              {% if field.required %}required{% endif %}
-            >
-          </div>
-        {% endfor %}
+    <div class="wizard-modal-progress">
+      <div class="wizard-progress-row wizard-progress-row-inline">
+        <div class="wizard-progress">
+          <span style="width: {{ progress }}%"></span>
+        </div>
+        <span class="wizard-progress-value">{{ progress }}%</span>
+        <span class="wizard-chip chip-{{ wizard.status_class }}">{{ wizard.status_label }}</span>
+        <span class="muted">{{ step_marker }}</span>
       </div>
+    </div>
 
-    {% elif step_type == "instruction" %}
-      <ol class="wizard-instruction-list">
-        {% for item in current_step.instructions %}
-          <li>{{ item }}</li>
-        {% endfor %}
-      </ol>
-
-    {% elif step_type == "test" %}
-      <div class="row">
-        {% for field in current_step.fields %}
-          <div>
-            <label>{{ field.label }}</label>
-            {% if field.input_type == "select" %}
-              <select name="field__{{ field.id }}">
-                {% for opt in field.options %}
-                  <option value="{{ opt.value }}" {% if current_payload.get(field.id, '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
-                {% endfor %}
-              </select>
-            {% else %}
-              <input
-                type="{{ field.input_type if field.input_type else 'text' }}"
-                name="field__{{ field.id }}"
-                value="{{ current_payload.get(field.id, '') }}"
-                placeholder="{{ field.placeholder if field.placeholder else '' }}"
-              >
+    <div class="wizard-modal-body">
+      <div class="section">
+        <div class="wizard-steps-line">
+          {% for s in steps %}
+            {% set step_class = "pending" %}
+            {% if loop.index0 < step_index %}
+              {% set step_class = "done" %}
+            {% elif loop.index0 == step_index %}
+              {% set step_class = "current" %}
             {% endif %}
-          </div>
-        {% endfor %}
-      </div>
-      <p class="muted">I test reali restano eseguibili nella pagina tecnica dedicata.</p>
-
-    {% elif step_type == "review" %}
-      <div class="wizard-review-box">
-        {% if draft_data %}
-          {% for k, v in draft_data.items() %}
-            <div class="wizard-review-item">
-              <strong>{{ k }}</strong>
-              <pre>{{ v }}</pre>
+            <div class="wizard-step-item {{ step_class }}">
+              <span>{{ loop.index }}</span>
+              <small>{{ s.title }}</small>
             </div>
           {% endfor %}
-        {% else %}
-          <p class="muted">Nessun dato bozza disponibile.</p>
-        {% endif %}
+        </div>
       </div>
-    {% endif %}
 
-    <div class="wizard-actions wizard-actions-spaced">
-      {% if has_previous %}
-      <button class="btn secondary" type="submit" name="action" value="back" formnovalidate>Indietro</button>
-      {% else %}
-      <span></span>
-      {% endif %}
-      <button class="btn secondary" type="submit" name="action" value="save" formnovalidate>Salva bozza</button>
-      <button class="btn primary" type="submit" name="action" value="continue">
-        {% if has_next %}Conferma e continua{% else %}Conferma finale{% endif %}
-      </button>
+      <div class="section">
+        <form method="post" action="/ui/wizard/{{ wizard.id }}" class="wizard-form" data-wizard-form>
+          <input type="hidden" name="step_index" value="{{ step_index }}">
+
+          <h3>{{ current_step.title }}</h3>
+          <p class="wizard-question">{{ current_step.question }}</p>
+          <p class="muted">{{ current_step.description }}</p>
+
+          {% set step_type = current_step.type %}
+
+          {% if step_type == "choice" %}
+            <div class="wizard-choice-list">
+              {% for opt in current_step.options %}
+                <label class="wizard-choice-item">
+                  <input
+                    type="radio"
+                    name="choice_value"
+                    value="{{ opt.value }}"
+                    {% if current_payload.get("value", "") == opt.value %}checked{% endif %}
+                  >
+                  <span>{{ opt.label }}</span>
+                </label>
+              {% endfor %}
+            </div>
+
+          {% elif step_type == "input" %}
+            {% set field = current_step.fields[0] if current_step.fields else None %}
+            {% if field %}
+              <div>
+                <label>{{ field.label }}</label>
+                <input
+                  type="{{ field.input_type if field.input_type else 'text' }}"
+                  name="field__{{ field.id }}"
+                  value="{{ current_payload.get(field.id, '') }}"
+                  placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                  {% if field.required %}required{% endif %}
+                >
+              </div>
+            {% endif %}
+
+          {% elif step_type == "two_inputs" %}
+            <div class="row">
+              {% for field in current_step.fields %}
+                <div>
+                  <label>{{ field.label }}</label>
+                  <input
+                    type="{{ field.input_type if field.input_type else 'text' }}"
+                    name="field__{{ field.id }}"
+                    value="{{ current_payload.get(field.id, '') }}"
+                    placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                    {% if field.required %}required{% endif %}
+                  >
+                </div>
+              {% endfor %}
+            </div>
+
+          {% elif step_type == "credentials" %}
+            <div class="row">
+              {% for field in current_step.fields %}
+                <div>
+                  <label>{{ field.label }}</label>
+                  <input
+                    type="{{ field.input_type if field.input_type else 'text' }}"
+                    name="field__{{ field.id }}"
+                    value="{{ current_payload.get(field.id, '') }}"
+                    placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                    {% if field.required %}required{% endif %}
+                  >
+                </div>
+              {% endfor %}
+            </div>
+
+          {% elif step_type == "instruction" %}
+            <ol class="wizard-instruction-list">
+              {% for item in current_step.instructions %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ol>
+
+          {% elif step_type == "test" %}
+            <div class="row">
+              {% for field in current_step.fields %}
+                <div>
+                  <label>{{ field.label }}</label>
+                  {% if field.input_type == "select" %}
+                    <select name="field__{{ field.id }}">
+                      {% for opt in field.options %}
+                        <option value="{{ opt.value }}" {% if current_payload.get(field.id, '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    <input
+                      type="{{ field.input_type if field.input_type else 'text' }}"
+                      name="field__{{ field.id }}"
+                      value="{{ current_payload.get(field.id, '') }}"
+                      placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                    >
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <p class="muted">I test reali restano eseguibili nella pagina tecnica dedicata.</p>
+
+          {% elif step_type == "review" %}
+            <div class="wizard-review-box">
+              {% if draft_data %}
+                {% for k, v in draft_data.items() %}
+                  <div class="wizard-review-item">
+                    <strong>{{ k }}</strong>
+                    <pre>{{ v }}</pre>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p class="muted">Nessun dato bozza disponibile.</p>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <div class="wizard-actions wizard-actions-spaced">
+            {% if has_previous %}
+            <button class="btn secondary" type="submit" name="action" value="back" formnovalidate>Indietro</button>
+            {% else %}
+            <span></span>
+            {% endif %}
+            <button class="btn secondary" type="submit" name="action" value="save" formnovalidate>Salva bozza</button>
+            <button class="btn primary" type="submit" name="action" value="continue">
+              {% if has_next %}Conferma e continua{% else %}Conferma finale{% endif %}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </form>
+  </section>
 </div>
+<script>
+  (function () {
+    const overlay = document.querySelector("[data-wizard-modal-overlay]");
+    if (!overlay) return;
 
-<div class="section">
-  <div class="wizard-actions">
-    <a href="/ui/configurations" class="btn secondary btn-xs">Torna alle configurazioni</a>
-  </div>
-</div>
+    const firstInteractive = overlay.querySelector(
+      "[data-wizard-form] input, [data-wizard-form] select, [data-wizard-form] textarea, [data-wizard-form] button"
+    );
+    if (firstInteractive) {
+      try {
+        firstInteractive.focus({ preventScroll: true });
+      } catch (err) {
+        firstInteractive.focus();
+      }
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        window.location.href = "/ui/configurations";
+      }
+    });
+  })();
+</script>
 {% endblock %}
