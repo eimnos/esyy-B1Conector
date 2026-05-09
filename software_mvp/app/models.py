@@ -147,3 +147,23 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class WizardSession(Base):
+    __tablename__ = "wizard_sessions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "wizard_id", "user_id", name="uq_wizard_session_scope"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(100), default="default", index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    wizard_id: Mapped[str] = mapped_column(String(100), index=True)
+    current_step_id: Mapped[str] = mapped_column(String(100), default="")
+    status: Mapped[str] = mapped_column(String(40), default="not_started", index=True)
+    draft_data_json: Mapped[str] = mapped_column(Text, default="{}")
+    last_test_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

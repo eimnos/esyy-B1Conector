@@ -45,6 +45,25 @@ from .services.sqlserver_service import (
     test_sqlserver_connection,
 )
 from .services.wizard_definitions import get_wizard_definition, list_wizard_card_definitions
+from .services.wizard_session_service import (
+    WIZARD_STATUS_COMPLETED,
+    WIZARD_STATUS_IN_PROGRESS,
+    WIZARD_STATUS_NOT_STARTED,
+    WIZARD_STATUS_READY_TO_CONFIRM,
+    WIZARD_STATUS_TEST_FAILED,
+    WIZARD_STATUS_WAITING_EXTERNAL_ACTION,
+    calculate_progress,
+    get_or_create_session,
+    get_session,
+    mark_completed,
+    move_back,
+    move_next,
+    move_to_step,
+    read_draft_data,
+    required_step_missing_fields,
+    save_step_data,
+    set_test_result,
+)
 
 router = APIRouter(tags=["ui"])
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
@@ -333,10 +352,35 @@ def _is_admin(user: AppUser | None) -> bool:
 
 
 def _wizard_step_count(wizard: dict[str, object]) -> int:
-    steps = wizard.get("steps")
-    if not isinstance(steps, list):
+    return len(_wizard_steps(wizard))
+
+
+def _wizard_steps(wizard: dict[str, object]) -> list[dict[str, object]]:
+    raw = wizard.get("steps")
+    if not isinstance(raw, list):
+        return []
+    return [step for step in raw if isinstance(step, dict)]
+
+
+def _wizard_step_id_by_index(wizard: dict[str, object], index: int) -> str:
+    steps = _wizard_steps(wizard)
+    if not steps:
+        return ""
+    safe_index = _clamp_step_index(index, len(steps))
+    return str(steps[safe_index].get("id") or f"step_{safe_index}").strip()
+
+
+def _wizard_step_index_by_id(wizard: dict[str, object], step_id: str | None) -> int:
+    steps = _wizard_steps(wizard)
+    if not steps:
         return 0
-    return len(steps)
+    clean = (step_id or "").strip()
+    if not clean:
+        return 0
+    for idx, step in enumerate(steps):
+        if str(step.get("id") or f"step_{idx}").strip() == clean:
+            return idx
+    return 0
 
 
 def _clamp_step_index(index: int, steps_count: int) -> int:
@@ -375,46 +419,6 @@ def _wizard_load_draft_entry(request: Request, wizard_id: str) -> dict[str, obje
     return {"data": legacy_data, "updated_at": None}
 
 
-def _wizard_load_draft(request: Request, wizard_id: str) -> dict[str, object]:
-    entry = _wizard_load_draft_entry(request, wizard_id)
-    data = entry.get("data")
-    if not isinstance(data, dict):
-        return {}
-    return dict(data)
-
-
-def _wizard_draft_updated_at(request: Request, wizard_id: str) -> datetime | None:
-    entry = _wizard_load_draft_entry(request, wizard_id)
-    raw = entry.get("updated_at")
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(str(raw))
-    except ValueError:
-        return None
-
-
-def _wizard_save_draft(
-    request: Request,
-    wizard_id: str,
-    draft_data: dict[str, object],
-    *,
-    step_index: int | None = None,
-) -> None:
-    session = request.scope.get("session")
-    if not isinstance(session, dict):
-        return
-    store = _wizard_session_store(request)
-    payload: dict[str, object] = {
-        "data": dict(draft_data),
-        "updated_at": datetime.utcnow().isoformat(timespec="seconds"),
-    }
-    if step_index is not None:
-        payload["step_index"] = step_index
-    store[wizard_id] = payload
-    session[WIZARD_DRAFTS_SESSION_KEY] = store
-
-
 def _wizard_extract_step_payload(step: dict[str, object], form_data: dict[str, str]) -> dict[str, str]:
     step_type = str(step.get("type") or "").strip().lower()
     payload: dict[str, str] = {}
@@ -428,13 +432,11 @@ def _wizard_extract_step_payload(step: dict[str, object], form_data: dict[str, s
             if not field_id:
                 continue
             value = str(form_data.get(f"field__{field_id}", "")).strip()
-            if value:
-                payload[field_id] = value
+            payload[field_id] = value
 
     if step_type == "choice":
         choice_value = str(form_data.get("choice_value", "")).strip()
-        if choice_value:
-            payload["value"] = choice_value
+        payload["value"] = choice_value
 
     return payload
 
@@ -445,9 +447,7 @@ def _wizard_render_context(
     step_index: int,
     draft_data: dict[str, object],
 ) -> dict[str, object]:
-    steps = wizard.get("steps")
-    if not isinstance(steps, list):
-        steps = []
+    steps = _wizard_steps(wizard)
     steps_count = len(steps)
     safe_index = _clamp_step_index(step_index, steps_count)
     current_step = steps[safe_index] if steps_count else {}
@@ -481,99 +481,170 @@ def _wizard_status_from_draft_progress(progress: int) -> tuple[str, str, str]:
     return "draft", "Bozza", "warning"
 
 
+def _wizard_status_display(status: str | None, progress: int) -> tuple[str, str, str]:
+    clean = (status or "").strip().lower()
+    if clean == WIZARD_STATUS_COMPLETED:
+        return "completed", "Completato", "success"
+    if clean == WIZARD_STATUS_TEST_FAILED:
+        return "test_failed", "Errore test", "danger"
+    if clean == WIZARD_STATUS_WAITING_EXTERNAL_ACTION:
+        return "waiting_external_action", "In attesa", "warning"
+    if clean == WIZARD_STATUS_READY_TO_CONFIRM:
+        return "ready_to_confirm", "Pronto conferma", "warning"
+    if clean == WIZARD_STATUS_IN_PROGRESS:
+        return "in_progress", "Bozza", "warning"
+    if clean == WIZARD_STATUS_NOT_STARTED:
+        return "not_configured", "Da configurare", "neutral"
+    return _wizard_status_from_draft_progress(progress)
+
+
+def _wizard_step_payload_map(draft_data: dict[str, object], step_id: str) -> dict[str, str]:
+    raw = draft_data.get(step_id)
+    if not isinstance(raw, dict):
+        return {}
+    payload: dict[str, str] = {}
+    for key, value in raw.items():
+        payload[str(key)] = str(value)
+    return payload
+
+
+def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
+    draft_data = read_draft_data(session_row)
+    engine_payload = _wizard_step_payload_map(draft_data, "engine")
+    source_payload = _wizard_step_payload_map(draft_data, "server_and_db")
+    credentials_payload = _wizard_step_payload_map(draft_data, "credentials")
+    test_payload = _wizard_step_payload_map(draft_data, "test")
+
+    db_engine = engine_payload.get("value", "").strip().lower()
+    if db_engine not in {"sqlserver", "hana"}:
+        raise ValueError("Seleziona il motore database (SQL Server o SAP HANA) nello step dedicato.")
+
+    server = source_payload.get("server", "").strip()
+    database = source_payload.get("database", "").strip()
+    username = credentials_payload.get("uid", "").strip() or credentials_payload.get("username", "").strip()
+    password = credentials_payload.get("pwd", "").strip() or credentials_payload.get("password", "").strip()
+    test_result = test_payload.get("result", "").strip().lower()
+
+    if test_result != "ok":
+        raise ValueError("Step test non confermato: imposta esito test su OK prima della conferma finale.")
+
+    if not server:
+        raise ValueError("Server obbligatorio nello step 'Server e database'.")
+    if not database:
+        raise ValueError("Database obbligatorio nello step 'Server e database'.")
+    if not username:
+        raise ValueError("Username obbligatorio nello step 'Credenziali'.")
+    if not password:
+        raise ValueError("Password obbligatoria nello step 'Credenziali'.")
+
+    if db_engine == "sqlserver":
+        current_sql = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default="")
+        parsed_sql = _parse_sqlserver_conn_str(current_sql)
+        conn_str = _build_sqlserver_conn_str(
+            driver=str(parsed_sql.get("driver") or "ODBC Driver 17 for SQL Server"),
+            server=server,
+            instance=str(parsed_sql.get("instance") or ""),
+            port=str(parsed_sql.get("port") or ""),
+            database=database,
+            uid=username,
+            pwd=password,
+            encrypt=bool(parsed_sql.get("encrypt")),
+            trust_server_certificate=bool(parsed_sql.get("trust_server_certificate", True)),
+        )
+        server_name, db_name = test_sqlserver_connection(conn_str)
+        _save_settings(
+            db,
+            {
+                SOURCE_DB_ENGINE_SETTING_KEY: "sqlserver",
+                SQLSERVER_CONN_STR_SETTING_KEY: conn_str,
+            },
+        )
+        return (
+            "Wizard SAP completato: impostazioni SQL Server salvate e testate "
+            f"(Server={server_name} | Database={db_name})."
+        )
+
+    current_hana = _load_setting(db, HANA_CONN_STR_SETTING_KEY, default="")
+    parsed_hana = _parse_hana_conn_str(current_hana)
+    hana_server = server
+    hana_port = str(parsed_hana.get("port") or "30015").strip() or "30015"
+    if ":" in server:
+        host, port = server.rsplit(":", 1)
+        if host.strip() and port.strip():
+            hana_server = host.strip()
+            hana_port = port.strip()
+
+    conn_str = _build_hana_conn_str(
+        driver=str(parsed_hana.get("driver") or "HDBODBC"),
+        server=hana_server,
+        port=hana_port,
+        database=database,
+        uid=username,
+        pwd=password,
+        encrypt=bool(parsed_hana.get("encrypt")),
+    )
+    _save_settings(
+        db,
+        {
+            SOURCE_DB_ENGINE_SETTING_KEY: "hana",
+            HANA_CONN_STR_SETTING_KEY: conn_str,
+        },
+    )
+    return (
+        "Wizard SAP completato: impostazioni HANA salvate. "
+        "Nota: test connessione HANA da verificare nell'ambiente operativo."
+    )
+
+
 def _fmt_last_updated(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.strftime("%d/%m/%Y %H:%M")
 
 
-def _wizard_real_last_update(db: Session, wizard_id: str) -> datetime | None:
-    points: list[datetime] = []
-
-    def _push(value: datetime | None) -> None:
-        if value is not None:
-            points.append(value)
-
-    if wizard_id == "sap":
-        _push(
-            db.query(func.max(AppSetting.updated_at))
-            .filter(AppSetting.key.in_([SQLSERVER_CONN_STR_SETTING_KEY, HANA_CONN_STR_SETTING_KEY, SOURCE_DB_ENGINE_SETTING_KEY]))
-            .scalar()
-        )
-    elif wizard_id == "bigquery":
-        _push(
-            db.query(func.max(AppSetting.updated_at))
-            .filter(
-                AppSetting.key.in_(
-                    [
-                        BQ_PROJECT_ID_SETTING_KEY,
-                        BQ_DATASET_SETTING_KEY,
-                        BQ_LOCATION_SETTING_KEY,
-                        BQ_CREDENTIALS_FILE_SETTING_KEY,
-                    ]
-                )
-            )
-            .scalar()
-        )
-    elif wizard_id == "data":
-        _push(db.query(func.max(ReportView.updated_at)).scalar())
-    elif wizard_id == "sync":
-        _push(db.query(func.max(Pipeline.updated_at)).scalar())
-    elif wizard_id == "schedule":
-        _push(db.query(func.max(Schedule.updated_at)).scalar())
-    elif wizard_id == "access":
-        _push(db.query(func.max(ACLRule.updated_at)).scalar())
-        _push(db.query(func.max(ACLFilterRule.updated_at)).scalar())
-    elif wizard_id == "looker":
-        _push(db.query(func.max(ACLFilterRule.updated_at)).scalar())
-        _push(db.query(func.max(Pipeline.updated_at)).scalar())
-    elif wizard_id == "monitoring":
-        _push(db.query(func.max(RunLog.created_at)).scalar())
-    elif wizard_id == "full":
-        for wid in ("sap", "bigquery", "data", "sync", "schedule", "access", "looker", "monitoring"):
-            _push(_wizard_real_last_update(db, wid))
-
-    if not points:
-        return None
-    return max(points)
-
-
 def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | int]]:
     cards: list[dict[str, str | int]] = []
+    user_id = _session_user_id(request)
+    tenant_id = "default"
+
     for raw in list_wizard_card_definitions():
         wizard_id = str(raw.get("id") or "").strip()
         wizard_def = get_wizard_definition(wizard_id) or {}
-        steps_raw = wizard_def.get("steps")
-        steps = steps_raw if isinstance(steps_raw, list) else []
+        steps = _wizard_steps(wizard_def)
         steps_count = len(steps)
 
-        draft_data = _wizard_load_draft(request, wizard_id)
-        completed_steps = 0
-        for step in steps:
-            if not isinstance(step, dict):
-                continue
-            step_id = str(step.get("id") or "").strip()
-            if not step_id:
-                continue
-            payload = draft_data.get(step_id)
-            if isinstance(payload, dict) and payload:
-                completed_steps += 1
+        session_row = get_session(db, tenant_id, wizard_id, user_id=user_id)
+        if session_row is None:
+            draft_data = {}
+            progress = 0
+            status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+            last_updated = None
+        else:
+            draft_data = read_draft_data(session_row)
+            progress = calculate_progress(session_row, wizard_def)
+            status, status_label, status_class = _wizard_status_display(session_row.status, progress)
+            last_updated = session_row.updated_at
+            if session_row.status == WIZARD_STATUS_COMPLETED:
+                progress = 100
 
-        progress = int((completed_steps / steps_count) * 100) if steps_count > 0 else 0
-        draft_updated = _wizard_draft_updated_at(request, wizard_id)
-        status, status_label, status_class = _wizard_status_from_draft_progress(progress)
-        if progress == 0 and draft_updated is not None:
-            status, status_label, status_class = ("draft", "Bozza", "warning")
+        completed_steps = 0
+        for idx, step in enumerate(steps):
+            step_id = str(step.get("id") or f"step_{idx}").strip()
+            payload = draft_data.get(step_id)
+            if isinstance(payload, dict) and any(str(v).strip() for v in payload.values()):
+                completed_steps += 1
 
         if wizard_id == "full":
             summary = "Percorso guidato unico per configurare tutto da zero."
-        elif progress <= 0:
-            summary = "Nessuna bozza wizard salvata."
+        elif status == "completed":
+            summary = "Wizard completato."
+        elif status == "test_failed":
+            summary = "Ultimo test non superato. Apri il wizard e correggi i dati."
+        elif status == "not_configured":
+            summary = "Nessuna sessione avviata."
         else:
             summary = f"Bozza in corso: {completed_steps}/{steps_count} step compilati."
 
-        real_updated = _wizard_real_last_update(db, wizard_id)
-        last_updated = draft_updated or real_updated
         last_updated_text = _fmt_last_updated(last_updated) or "n/d"
 
         action_label = "Avvia setup completo" if wizard_id == "full" else "Apri wizard"
@@ -592,6 +663,7 @@ def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | i
                 "has_last_updated": bool(last_updated),
                 "steps_count": steps_count,
                 "completed_steps": completed_steps,
+                "wizard_session_status": session_row.status if session_row else WIZARD_STATUS_NOT_STARTED,
             }
         )
     return cards
@@ -929,7 +1001,11 @@ def ui_configurations(
     cards = _build_wizard_cards(request, db)
     full_card = next((c for c in cards if str(c.get("id")) == "full"), None)
     wizard_cards = [c for c in cards if str(c.get("id")) != "full"]
-    drafts_count = sum(1 for c in wizard_cards if c["status"] == "draft")
+    drafts_count = sum(
+        1
+        for c in wizard_cards
+        if str(c.get("status")) in {"in_progress", "waiting_external_action", "ready_to_confirm", "test_failed"}
+    )
     pending_count = sum(1 for c in wizard_cards if c["status"] == "not_configured")
 
     return templates.TemplateResponse(
@@ -956,19 +1032,56 @@ def ui_wizard(
     db: Session = Depends(get_db),
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
-    step: int = Query(default=0),
+    step: int | None = Query(default=None),
 ) -> HTMLResponse:
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
+
+    steps_count = _wizard_step_count(row)
+    if steps_count <= 0:
+        return _redirect("/ui/configurations", error="Wizard non configurato.")
+
+    user_id = _session_user_id(request)
+    session_row = get_or_create_session(db, "default", wizard_id, user_id=user_id)
+
+    # Temporary compatibility fallback: import old browser draft only once if DB draft is still empty.
+    db_draft = read_draft_data(session_row)
+    if not db_draft:
+        legacy_entry = _wizard_load_draft_entry(request, wizard_id)
+        legacy_data = legacy_entry.get("data")
+        if isinstance(legacy_data, dict) and legacy_data:
+            for step_key, payload in legacy_data.items():
+                if not isinstance(payload, dict):
+                    continue
+                normalized_payload: dict[str, str] = {
+                    str(k): str(v) for k, v in payload.items() if k is not None and v is not None
+                }
+                session_row = save_step_data(db, session_row, str(step_key), normalized_payload)
+            raw_step_index = legacy_entry.get("step_index")
+            if isinstance(raw_step_index, int):
+                session_row = move_to_step(db, session_row, _wizard_step_id_by_index(row, raw_step_index))
+        db_draft = read_draft_data(session_row)
+
+    current_step_index = _wizard_step_index_by_id(row, session_row.current_step_id)
+    resolved_step_id = _wizard_step_id_by_index(row, current_step_index)
+    if session_row.current_step_id != resolved_step_id:
+        session_row = move_to_step(db, session_row, resolved_step_id)
+
+    if step is not None:
+        forced_index = _clamp_step_index(step, steps_count)
+        if forced_index != current_step_index:
+            current_step_index = forced_index
+            forced_step_id = _wizard_step_id_by_index(row, current_step_index)
+            session_row = move_to_step(db, session_row, forced_step_id)
 
     cards = _build_wizard_cards(request, db)
     card = next((c for c in cards if str(c["id"]) == wizard_id), None)
     if card is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non disponibile.")
 
-    draft_data = _wizard_load_draft(request, wizard_id)
-    wizard_ctx = _wizard_render_context(wizard=row, step_index=step, draft_data=draft_data)
+    draft_data = read_draft_data(session_row)
+    wizard_ctx = _wizard_render_context(wizard=row, step_index=current_step_index, draft_data=draft_data)
 
     return templates.TemplateResponse(
         request=request,
@@ -980,6 +1093,7 @@ def ui_wizard(
             "wizard_meta": row,
             "technical_route": card["technical_route"],
             "draft_data": draft_data,
+            "wizard_session": session_row,
             **wizard_ctx,
             "message": message,
             "error": error,
@@ -991,6 +1105,7 @@ def ui_wizard(
 async def ui_wizard_action(
     wizard_id: str,
     request: Request,
+    db: Session = Depends(get_db),
 ) -> RedirectResponse:
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
@@ -1003,45 +1118,107 @@ async def ui_wizard_action(
     except ValueError:
         step_index = 0
 
-    steps_count = _wizard_step_count(row)
-    step_index = _clamp_step_index(step_index, steps_count)
-    steps = row.get("steps")
-    if not isinstance(steps, list) or not steps:
+    steps = _wizard_steps(row)
+    steps_count = len(steps)
+    if not steps:
         return _redirect("/ui/wizard/" + wizard_id, error="Wizard non configurato.")
 
-    current_step = steps[step_index]
-    if not isinstance(current_step, dict):
-        return _redirect("/ui/wizard/" + wizard_id, error="Step wizard non valido.")
+    user_id = _session_user_id(request)
+    session_row = get_or_create_session(db, "default", wizard_id, user_id=user_id)
+    current_step_index = _wizard_step_index_by_id(row, session_row.current_step_id)
+    current_step_id = _wizard_step_id_by_index(row, current_step_index)
+    if session_row.current_step_id != current_step_id:
+        session_row = move_to_step(db, session_row, current_step_id)
+
+    # If form carries a different step index (e.g. stale tab), align session to requested step.
+    aligned_step_index = _clamp_step_index(step_index, steps_count)
+    if aligned_step_index != current_step_index:
+        current_step_index = aligned_step_index
+        current_step_id = _wizard_step_id_by_index(row, current_step_index)
+        session_row = move_to_step(db, session_row, current_step_id)
+
+    current_step = steps[current_step_index]
 
     form_data: dict[str, str] = {}
     for key, value in form.items():
         form_data[str(key)] = str(value)
 
-    draft_data = _wizard_load_draft(request, wizard_id)
     step_payload = _wizard_extract_step_payload(current_step, form_data)
-    current_step_id = str(current_step.get("id") or f"step_{step_index}")
-    if step_payload:
-        draft_data[current_step_id] = step_payload
-    if action in {"save", "continue"}:
-        _wizard_save_draft(request, wizard_id, draft_data, step_index=step_index)
+    current_step_id = str(current_step.get("id") or f"step_{current_step_index}")
+    session_row = save_step_data(db, session_row, current_step_id, step_payload)
+
+    current_step_type = str(current_step.get("type") or "").strip().lower()
+    if current_step_type == "test":
+        result_values = []
+        for key, value in step_payload.items():
+            if key == "result" or key.endswith("_result"):
+                result_values.append(str(value).strip().lower())
+        if any(v in {"ko", "failed", "error"} for v in result_values):
+            session_row = set_test_result(
+                db,
+                session_row,
+                WIZARD_STATUS_TEST_FAILED,
+                "Almeno un test e risultato KO.",
+            )
+        elif any(v in {"pending", ""} for v in result_values):
+            session_row = set_test_result(
+                db,
+                session_row,
+                WIZARD_STATUS_WAITING_EXTERNAL_ACTION,
+                "Test non ancora completati.",
+            )
+        elif result_values:
+            session_row = set_test_result(
+                db,
+                session_row,
+                WIZARD_STATUS_IN_PROGRESS,
+                "Test completati con esito positivo.",
+            )
 
     if action == "back":
-        new_step = _clamp_step_index(step_index - 1, steps_count)
-        return _redirect(f"/ui/wizard/{wizard_id}?step={new_step}")
+        move_back(db, session_row, row)
+        return _redirect(f"/ui/wizard/{wizard_id}")
 
     if action == "save":
         return _redirect(
-            f"/ui/wizard/{wizard_id}?step={step_index}",
+            f"/ui/wizard/{wizard_id}",
             message="Bozza wizard salvata.",
         )
 
-    new_step = _clamp_step_index(step_index + 1, steps_count)
-    if step_index >= steps_count - 1:
+    if current_step_index >= steps_count - 1:
+        missing_required = required_step_missing_fields(session_row, row)
+        if missing_required:
+            preview = "; ".join(missing_required[:3])
+            suffix = ""
+            if len(missing_required) > 3:
+                suffix = f" (+{len(missing_required) - 3} altri campi)"
+            return _redirect(
+                f"/ui/wizard/{wizard_id}",
+                error=f"Compila i campi obbligatori prima della conferma finale: {preview}{suffix}",
+            )
+        completion_message = "Wizard completato."
+        if wizard_id == "sap":
+            try:
+                completion_message = _apply_sap_wizard_to_settings(db, session_row)
+            except (ValueError, SQLServerPublishError) as exc:
+                set_test_result(
+                    db,
+                    session_row,
+                    WIZARD_STATUS_TEST_FAILED,
+                    str(exc),
+                )
+                return _redirect(
+                    f"/ui/wizard/{wizard_id}",
+                    error=f"Conferma finale non completata: {exc}",
+                )
+        mark_completed(db, session_row)
         return _redirect(
-            f"/ui/wizard/{wizard_id}?step={step_index}",
-            message="Wizard completato. Puoi procedere con la configurazione tecnica.",
+            f"/ui/wizard/{wizard_id}",
+            message=completion_message,
         )
-    return _redirect(f"/ui/wizard/{wizard_id}?step={new_step}")
+
+    move_next(db, session_row, row)
+    return _redirect(f"/ui/wizard/{wizard_id}")
 
 
 @router.get("/ui/summaries", response_class=HTMLResponse)
@@ -1051,12 +1228,17 @@ def ui_summaries(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> HTMLResponse:
-    return _render_overview(
+    cards = _build_wizard_cards(request, db)
+    return templates.TemplateResponse(
         request=request,
-        db=db,
-        message=message,
-        error=error,
-        active_nav="summaries",
+        name="summaries.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "summaries",
+            "cards": cards,
+            "message": message,
+            "error": error,
+        },
     )
 
 
