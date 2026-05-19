@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <div class="wizard-title-row">
+    <div class="wizard-icon wizard-icon-lg">{{ wizard.icon_label }}</div>
+    <div>
+      <h2>{{ wizard.order }} - {{ wizard.title }}</h2>
+      <p class="muted">{{ wizard.description }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Scegli come procedere</h3>
+  <p class="muted">Puoi creare una nuova configurazione oppure modificare una configurazione esistente.</p>
+  <div class="wizard-actions">
+    <a href="{{ create_route }}" class="btn primary">Crea nuovo</a>
+    <a href="/ui/configurations" class="btn secondary">Torna alle configurazioni</a>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Configurazioni esistenti</h3>
+  {% if entries %}
+    <table>
+      <thead>
+        <tr>
+          <th>Configurazione</th>
+          <th>Dettagli</th>
+          <th>Ultimo aggiornamento</th>
+          <th>Azione</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td>{{ e.title }}</td>
+          <td>{{ e.subtitle }}</td>
+          <td>{{ e.updated_at }}</td>
+          <td>
+            <a href="{{ e.edit_route }}" class="btn secondary btn-xs">Modifica</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Nessuna configurazione esistente: usa "Crea nuovo".</p>
+  {% endif %}
+</div>
+{% endblock %}

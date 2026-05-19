@@ -2,7 +2,7 @@
 {% block body %}
 <div class="section">
   <h2>Riepiloghi configurazione</h2>
-  <p class="muted">Snapshot leggibile dello stato wizard, utile per collaudo e passaggio consegne.</p>
+  <p class="muted">Vista sola lettura dello stato wizard, utile per collaudo e passaggio consegne.</p>
 </div>
 
 <div class="wizard-grid">
@@ -31,9 +31,7 @@
     </div>
     <div class="wizard-updated muted">Ultima modifica: {{ w.last_updated }}</div>
 
-    <div class="wizard-actions">
-      <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }}</a>
-    </div>
+    <p class="muted">Pagina di sola consultazione: le azioni operative sono disponibili in Configurazioni.</p>
   </article>
   {% else %}
   <article class="wizard-card">

@@ -148,7 +148,7 @@
           <p class="muted">{{ wizard_meta.subtitle }}</p>
         </div>
       </div>
-      <a href="/ui/configurations" class="btn secondary btn-xs">Chiudi</a>
+      <a href="{{ wizard_close_url }}" class="btn secondary btn-xs">Chiudi</a>
     </header>
 
     <div class="wizard-modal-progress">
@@ -181,8 +181,10 @@
       </div>
 
       <div class="section">
-        <form method="post" action="/ui/wizard/{{ wizard.id }}" class="wizard-form" data-wizard-form>
+        <form method="post" action="{{ wizard_form_action }}" class="wizard-form" data-wizard-form>
           <input type="hidden" name="step_index" value="{{ step_index }}">
+          <input type="hidden" name="mode" value="{{ wizard_mode }}">
+          <input type="hidden" name="target" value="{{ wizard_target }}">
 
           <h3>{{ current_step.title }}</h3>
           <p class="wizard-question">{{ current_step.question }}</p>
@@ -339,7 +341,7 @@
             {% endif %}
             <button class="btn secondary" type="submit" name="action" value="save" formnovalidate>Salva bozza</button>
             {% if not has_next and wizard_session.status == "completed" %}
-            <a href="/ui/configurations" class="btn primary">Torna alle configurazioni</a>
+            <a href="{{ wizard_close_url }}" class="btn primary">Chiudi wizard</a>
             {% else %}
             <button class="btn primary" type="submit" name="action" value="continue">
               {% if has_next %}Conferma e continua{% else %}Conferma finale{% endif %}
@@ -369,7 +371,7 @@
 
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape") {
-        window.location.href = "/ui/configurations";
+        window.location.href = "{{ wizard_close_url }}";
       }
     });
   })();

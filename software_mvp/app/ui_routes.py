@@ -97,6 +97,8 @@ ACL_FILTER_OPERATORS = [
 ]
 ACL_FILTER_OPERATOR_KEYS = {key for key, _ in ACL_FILTER_OPERATORS}
 PIPELINE_WRITE_MODES = {"WRITE_TRUNCATE", "WRITE_APPEND", "WRITE_EMPTY"}
+MULTI_CONFIG_WIZARD_IDS = {"sync", "schedule", "access"}
+SINGLE_CONFIG_WIZARD_IDS = {"sap", "bigquery"}
 
 
 def _redirect(
@@ -510,52 +512,86 @@ def _wizard_step_payload_map(draft_data: dict[str, object], step_id: str) -> dic
 
 
 def _enrich_wizard_runtime_definition(wizard_id: str, wizard_row: dict[str, object], db: Session) -> dict[str, object]:
-    if wizard_id != "sync":
-        return wizard_row
-
     steps = _wizard_steps(wizard_row)
     if not steps:
         return wizard_row
 
-    views = (
-        db.query(ReportView)
-        .order_by(ReportView.schema_name.asc(), ReportView.view_name.asc(), ReportView.id.asc())
-        .all()
-    )
-    view_options = [{"value": "", "label": "-- seleziona view --"}]
-    for row in views:
-        view_options.append(
-            {
-                "value": str(row.id),
-                "label": f"{row.id} - {row.schema_name}.{row.view_name}",
-            }
+    if wizard_id == "sync":
+        views = (
+            db.query(ReportView)
+            .order_by(ReportView.schema_name.asc(), ReportView.view_name.asc(), ReportView.id.asc())
+            .all()
         )
+        view_options = [{"value": "", "label": "-- seleziona view --"}]
+        for row in views:
+            view_options.append(
+                {
+                    "value": str(row.id),
+                    "label": f"{row.id} - {row.schema_name}.{row.view_name}",
+                }
+            )
 
-    dataset_default = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip() or "sap_reporting"
+        dataset_default = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip() or "sap_reporting"
 
-    for step in steps:
-        if str(step.get("id") or "") == "source_view":
-            fields = step.get("fields")
-            if isinstance(fields, list):
-                for field in fields:
-                    if not isinstance(field, dict):
-                        continue
-                    if str(field.get("id") or "") == "source_view_id":
-                        field["input_type"] = "select"
-                        field["options"] = view_options
-            if not views:
-                step["description"] = (
-                    "Nessuna view disponibile. Prima crea una view nella sezione "
-                    "'Dati da esportare' (Query Builder)."
-                )
-        elif str(step.get("id") or "") == "pipeline_target":
-            fields = step.get("fields")
-            if isinstance(fields, list):
-                for field in fields:
-                    if not isinstance(field, dict):
-                        continue
-                    if str(field.get("id") or "") == "bq_dataset":
-                        field["default"] = dataset_default
+        for step in steps:
+            if str(step.get("id") or "") == "source_view":
+                fields = step.get("fields")
+                if isinstance(fields, list):
+                    for field in fields:
+                        if not isinstance(field, dict):
+                            continue
+                        if str(field.get("id") or "") == "source_view_id":
+                            field["input_type"] = "select"
+                            field["options"] = view_options
+                if not views:
+                    step["description"] = (
+                        "Nessuna view disponibile. Prima crea una view nella sezione "
+                        "'Dati da esportare' (Query Builder)."
+                    )
+            elif str(step.get("id") or "") == "pipeline_target":
+                fields = step.get("fields")
+                if isinstance(fields, list):
+                    for field in fields:
+                        if not isinstance(field, dict):
+                            continue
+                        if str(field.get("id") or "") == "bq_dataset":
+                            field["default"] = dataset_default
+        return wizard_row
+
+    if wizard_id == "schedule":
+        pipeline_rows = db.query(Pipeline).order_by(Pipeline.name.asc(), Pipeline.id.asc()).all()
+        pipeline_options = [{"value": "", "label": "-- seleziona pipeline --"}]
+        for row in pipeline_rows:
+            pipeline_options.append({"value": str(row.id), "label": f"{row.id} - {row.name}"})
+        timezone_options = [{"value": tz, "label": tz} for tz in _schedule_timezone_choices()]
+
+        for step in steps:
+            step_id = str(step.get("id") or "")
+            if step_id == "pipeline":
+                fields = step.get("fields")
+                if isinstance(fields, list):
+                    for field in fields:
+                        if not isinstance(field, dict):
+                            continue
+                        if str(field.get("id") or "") == "pipeline_id":
+                            field["input_type"] = "select"
+                            field["options"] = pipeline_options
+                if not pipeline_rows:
+                    step["description"] = "Nessuna pipeline disponibile. Crea prima una pipeline."
+            elif step_id == "timing":
+                fields = step.get("fields")
+                if isinstance(fields, list):
+                    for field in fields:
+                        if not isinstance(field, dict):
+                            continue
+                        if str(field.get("id") or "") == "timezone":
+                            field["input_type"] = "select"
+                            field["options"] = timezone_options
+                            if not field.get("default"):
+                                field["default"] = "Europe/Rome"
+                        if str(field.get("id") or "") == "cron_expression" and not field.get("default"):
+                            field["default"] = "0 * * * *"
+        return wizard_row
 
     return wizard_row
 
@@ -667,7 +703,12 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
     )
 
 
-def _apply_sync_wizard_to_pipeline(db: Session, session_row) -> str:
+def _apply_sync_wizard_to_pipeline(
+    db: Session,
+    session_row,
+    *,
+    target_pipeline_id: int | None = None,
+) -> str:
     draft_data = read_draft_data(session_row)
     identity_payload = _wizard_step_payload_map(draft_data, "pipeline_identity")
     source_payload = _wizard_step_payload_map(draft_data, "source_view")
@@ -703,12 +744,18 @@ def _apply_sync_wizard_to_pipeline(db: Session, session_row) -> str:
     if write_mode not in PIPELINE_WRITE_MODES:
         raise ValueError("Write mode non valido nello step 'Modalita di scrittura'.")
 
-    row = (
-        db.query(Pipeline)
-        .filter(Pipeline.tenant_code == tenant_code)
-        .filter(Pipeline.name == pipeline_name)
-        .first()
-    )
+    row = None
+    if target_pipeline_id is not None:
+        row = db.get(Pipeline, target_pipeline_id)
+        if row is None:
+            raise ValueError("Pipeline selezionata non trovata.")
+    if row is None:
+        row = (
+            db.query(Pipeline)
+            .filter(Pipeline.tenant_code == tenant_code)
+            .filter(Pipeline.name == pipeline_name)
+            .first()
+        )
     created = row is None
     if row is None:
         row = Pipeline(
@@ -723,6 +770,8 @@ def _apply_sync_wizard_to_pipeline(db: Session, session_row) -> str:
         )
         db.add(row)
     else:
+        row.tenant_code = tenant_code
+        row.name = pipeline_name
         row.source_view_id = source_view_id
         row.bq_dataset = bq_dataset
         row.bq_table = bq_table
@@ -744,16 +793,434 @@ def _apply_sync_wizard_to_pipeline(db: Session, session_row) -> str:
     )
 
 
+def _apply_schedule_wizard_to_schedule(
+    db: Session,
+    session_row,
+    *,
+    target_schedule_id: int | None = None,
+) -> str:
+    draft_data = read_draft_data(session_row)
+    pipeline_payload = _wizard_step_payload_map(draft_data, "pipeline")
+    timing_payload = _wizard_step_payload_map(draft_data, "timing")
+    active_payload = _wizard_step_payload_map(draft_data, "active")
+
+    pipeline_raw = (pipeline_payload.get("pipeline_id") or "").strip()
+    if not pipeline_raw:
+        raise ValueError("Pipeline obbligatoria nello step 'Pipeline'.")
+    try:
+        pipeline_id = int(pipeline_raw)
+    except ValueError as exc:
+        raise ValueError("Pipeline non valida nello step 'Pipeline'.") from exc
+
+    pipeline_row = db.get(Pipeline, pipeline_id)
+    if pipeline_row is None:
+        raise ValueError("Pipeline selezionata non trovata.")
+
+    cron_expression = (timing_payload.get("cron_expression") or "").strip()
+    if not cron_expression:
+        raise ValueError("Cron obbligatorio nello step 'Cron e timezone'.")
+    timezone = (timing_payload.get("timezone") or "").strip() or "Europe/Rome"
+    try:
+        validate_cron_expression(cron_expression, timezone)
+    except ValueError as exc:
+        raise ValueError(f"Cron non valido: {exc}") from exc
+
+    active_value = (active_payload.get("value") or "").strip().lower()
+    is_active = active_value not in {"", "no", "false", "0"}
+
+    row = None
+    if target_schedule_id is not None:
+        row = db.get(Schedule, target_schedule_id)
+        if row is None:
+            raise ValueError("Schedule selezionata non trovata.")
+
+    created = row is None
+    if row is None:
+        row = Schedule(
+            pipeline_id=pipeline_id,
+            cron_expression=cron_expression,
+            timezone=timezone,
+            is_active=is_active,
+        )
+        db.add(row)
+    else:
+        row.pipeline_id = pipeline_id
+        row.cron_expression = cron_expression
+        row.timezone = timezone
+        row.is_active = is_active
+        row.updated_at = datetime.utcnow()
+
+    try:
+        db.commit()
+        db.refresh(row)
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError(f"Errore salvataggio schedule: {exc}") from exc
+
+    reload_jobs()
+    action = "creata" if created else "aggiornata"
+    state = "attiva" if row.is_active else "disattiva"
+    return (
+        f"Wizard pianificazione completato: schedule {action} "
+        f"(ID {row.id}, pipeline={pipeline_row.name}, cron='{row.cron_expression}', tz={row.timezone}, stato={state})."
+    )
+
+
 def _fmt_last_updated(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.strftime("%d/%m/%Y %H:%M")
 
 
+def _wizard_url(
+    wizard_id: str,
+    *,
+    mode: str | None = None,
+    target: str | None = None,
+    step: int | None = None,
+    init: bool = False,
+) -> str:
+    params: dict[str, str] = {}
+    clean_mode = (mode or "").strip().lower()
+    clean_target = (target or "").strip()
+    if clean_mode:
+        params["mode"] = clean_mode
+    if clean_target:
+        params["target"] = clean_target
+    if step is not None:
+        params["step"] = str(step)
+    if init:
+        params["init"] = "1"
+    query = urlencode(params)
+    if query:
+        return f"/ui/wizard/{wizard_id}?{query}"
+    return f"/ui/wizard/{wizard_id}"
+
+
+def _single_wizard_is_configured(wizard_id: str, db: Session) -> bool:
+    clean = (wizard_id or "").strip().lower()
+    if clean == "sap":
+        source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower() or "sqlserver"
+        if source_db_engine == "hana":
+            return bool(_load_setting(db, HANA_CONN_STR_SETTING_KEY, default="").strip())
+        return bool(_load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default="").strip())
+    if clean == "bigquery":
+        project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
+        dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
+        return bool(project and dataset)
+    return False
+
+
+def _wizard_existing_entries(wizard_id: str, db: Session) -> list[dict[str, str]]:
+    clean = (wizard_id or "").strip().lower()
+    items: list[dict[str, str]] = []
+
+    if clean == "sync":
+        rows = db.query(Pipeline).order_by(Pipeline.updated_at.desc(), Pipeline.id.desc()).all()
+        for row in rows:
+            view_name = ""
+            if row.source_view_id:
+                view = db.get(ReportView, row.source_view_id)
+                if view:
+                    view_name = f"{view.schema_name}.{view.view_name}"
+            subtitle_parts = [f"Tenant={row.tenant_code}", f"Target={row.bq_dataset}.{row.bq_table}"]
+            if view_name:
+                subtitle_parts.insert(1, f"View={view_name}")
+            items.append(
+                {
+                    "target": str(row.id),
+                    "title": row.name,
+                    "subtitle": " | ".join(subtitle_parts),
+                    "updated_at": _fmt_last_updated(row.updated_at) or "n/d",
+                    "edit_route": _wizard_url(clean, mode="edit", target=str(row.id), init=True),
+                }
+            )
+        return items
+
+    if clean == "schedule":
+        rows = (
+            db.query(Schedule, Pipeline)
+            .join(Pipeline, Pipeline.id == Schedule.pipeline_id)
+            .order_by(Schedule.updated_at.desc(), Schedule.id.desc())
+            .all()
+        )
+        for schedule_row, pipeline_row in rows:
+            status = "attiva" if schedule_row.is_active else "disattiva"
+            items.append(
+                {
+                    "target": str(schedule_row.id),
+                    "title": f"Schedule #{schedule_row.id}",
+                    "subtitle": (
+                        f"Pipeline={pipeline_row.name} | Cron={schedule_row.cron_expression} | "
+                        f"TZ={schedule_row.timezone} | Stato={status}"
+                    ),
+                    "updated_at": _fmt_last_updated(schedule_row.updated_at) or "n/d",
+                    "edit_route": _wizard_url(clean, mode="edit", target=str(schedule_row.id), init=True),
+                }
+            )
+        return items
+
+    if clean == "access":
+        filter_rows = (
+            db.query(ACLFilterRule, ReportView)
+            .join(ReportView, ReportView.id == ACLFilterRule.view_id)
+            .order_by(ACLFilterRule.updated_at.desc(), ACLFilterRule.id.desc())
+            .all()
+        )
+        for acl_row, view_row in filter_rows:
+            base = f"{acl_row.user_email} | {view_row.view_name}"
+            if acl_row.is_master:
+                detail = "MASTER"
+            else:
+                detail = f"{acl_row.field_name} {acl_row.operator} {acl_row.field_value}"
+            status = "attiva" if acl_row.is_active else "disattiva"
+            items.append(
+                {
+                    "target": f"filter:{acl_row.id}",
+                    "title": "Regola ACL generica",
+                    "subtitle": f"{base} | {detail} | Stato={status}",
+                    "updated_at": _fmt_last_updated(acl_row.updated_at) or "n/d",
+                    "edit_route": _wizard_url(clean, mode="edit", target=f"filter:{acl_row.id}", init=True),
+                }
+            )
+
+        legacy_rows = db.query(ACLRule).order_by(ACLRule.updated_at.desc(), ACLRule.id.desc()).all()
+        for acl_row in legacy_rows:
+            customer = "MASTER" if acl_row.customer_code == MASTER_CUSTOMER_CODE else acl_row.customer_code
+            status = "attiva" if acl_row.is_active else "disattiva"
+            items.append(
+                {
+                    "target": f"legacy:{acl_row.id}",
+                    "title": "Regola ACL legacy",
+                    "subtitle": f"{acl_row.user_email} | customer={customer} | Stato={status}",
+                    "updated_at": _fmt_last_updated(acl_row.updated_at) or "n/d",
+                    "edit_route": _wizard_url(clean, mode="edit", target=f"legacy:{acl_row.id}", init=True),
+                }
+            )
+        return items
+
+    return items
+
+
+def _wizard_prefill_from_single_settings(wizard_id: str, db: Session) -> dict[str, dict[str, str]]:
+    clean = (wizard_id or "").strip().lower()
+    payload: dict[str, dict[str, str]] = {}
+
+    if clean == "sap":
+        source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower() or "sqlserver"
+        if source_db_engine == "hana":
+            parsed = _parse_hana_conn_str(_load_setting(db, HANA_CONN_STR_SETTING_KEY, default=""))
+            server = str(parsed.get("server") or "").strip()
+            port = str(parsed.get("port") or "").strip()
+            server_token = server
+            if server and port:
+                server_token = f"{server}:{port}"
+            payload = {
+                "intro": {},
+                "engine": {"value": "hana"},
+                "server_and_db": {
+                    "server": server_token,
+                    "database": str(parsed.get("database") or "").strip(),
+                },
+                "credentials": {
+                    "uid": str(parsed.get("uid") or "").strip(),
+                    "pwd": str(parsed.get("pwd") or "").strip(),
+                },
+                "test": {"result": "ok"},
+                "review": {},
+            }
+        else:
+            parsed = _parse_sqlserver_conn_str(_load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default=""))
+            server_token = str(parsed.get("server") or "").strip()
+            instance = str(parsed.get("instance") or "").strip()
+            port = str(parsed.get("port") or "").strip()
+            if instance:
+                server_token = f"{server_token}\\{instance}"
+            elif port:
+                server_token = f"{server_token},{port}"
+            payload = {
+                "intro": {},
+                "engine": {"value": "sqlserver"},
+                "server_and_db": {
+                    "server": server_token,
+                    "database": str(parsed.get("database") or "").strip(),
+                },
+                "credentials": {
+                    "uid": str(parsed.get("uid") or "").strip(),
+                    "pwd": str(parsed.get("pwd") or "").strip(),
+                },
+                "test": {"result": "ok"},
+                "review": {},
+            }
+        return payload
+
+    if clean == "bigquery":
+        project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
+        dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
+        location = _load_setting(db, BQ_LOCATION_SETTING_KEY, default=settings.bq_location).strip() or "EU"
+        credentials_file = _load_setting(db, BQ_CREDENTIALS_FILE_SETTING_KEY, default="").strip()
+        payload = {
+            "intro": {},
+            "project": {"project_id": project},
+            "dataset_and_location": {"dataset": dataset, "location": location},
+            "credentials": {"credentials_path": credentials_file},
+            "review": {},
+        }
+        return payload
+
+    return payload
+
+
+def _wizard_prefill_from_multi_target(
+    wizard_id: str,
+    target: str,
+    db: Session,
+) -> tuple[dict[str, dict[str, str]] | None, str | None]:
+    clean = (wizard_id or "").strip().lower()
+    clean_target = (target or "").strip()
+    if not clean_target:
+        return None, "Seleziona una configurazione esistente da modificare."
+
+    if clean == "sync":
+        try:
+            pipeline_id = int(clean_target)
+        except ValueError:
+            return None, "Pipeline selezionata non valida."
+        row = db.get(Pipeline, pipeline_id)
+        if row is None:
+            return None, "Pipeline selezionata non trovata."
+        return (
+            {
+                "intro": {},
+                "pipeline_identity": {
+                    "tenant_code": row.tenant_code or "default",
+                    "name": row.name or "",
+                },
+                "source_view": {"source_view_id": str(row.source_view_id or "")},
+                "pipeline_target": {
+                    "bq_dataset": row.bq_dataset or "",
+                    "bq_table": row.bq_table or "",
+                },
+                "write_mode": {"value": (row.write_mode or "WRITE_TRUNCATE").upper()},
+                "review": {},
+            },
+            None,
+        )
+
+    if clean == "schedule":
+        try:
+            schedule_id = int(clean_target)
+        except ValueError:
+            return None, "Schedule selezionata non valida."
+        row = db.get(Schedule, schedule_id)
+        if row is None:
+            return None, "Schedule selezionata non trovata."
+        return (
+            {
+                "intro": {},
+                "pipeline": {"pipeline_id": str(row.pipeline_id)},
+                "timing": {
+                    "cron_expression": row.cron_expression or "",
+                    "timezone": row.timezone or "Europe/Rome",
+                },
+                "active": {"value": "yes" if row.is_active else "no"},
+                "review": {},
+            },
+            None,
+        )
+
+    if clean == "access":
+        if clean_target.startswith("filter:"):
+            raw_id = clean_target.split(":", 1)[1]
+            try:
+                filter_id = int(raw_id)
+            except ValueError:
+                return None, "Regola ACL filtro selezionata non valida."
+            row = db.get(ACLFilterRule, filter_id)
+            if row is None:
+                return None, "Regola ACL filtro non trovata."
+            return (
+                {
+                    "intro": {},
+                    "mode": {"value": "generic"},
+                    "review": {
+                        "target_type": "filter",
+                        "target_id": str(row.id),
+                        "user_email": row.user_email or "",
+                    },
+                },
+                None,
+            )
+        if clean_target.startswith("legacy:"):
+            raw_id = clean_target.split(":", 1)[1]
+            try:
+                rule_id = int(raw_id)
+            except ValueError:
+                return None, "Regola ACL legacy selezionata non valida."
+            row = db.get(ACLRule, rule_id)
+            if row is None:
+                return None, "Regola ACL legacy non trovata."
+            return (
+                {
+                    "intro": {},
+                    "mode": {"value": "legacy"},
+                    "review": {
+                        "target_type": "legacy",
+                        "target_id": str(row.id),
+                        "user_email": row.user_email or "",
+                    },
+                },
+                None,
+            )
+        return None, "Configurazione ACL selezionata non valida."
+
+    return None, "Wizard multi-configurazione non supportato."
+
+
+def _wizard_reset_session_with_prefill(
+    db: Session,
+    session_row,
+    wizard_definition: dict[str, object],
+    draft_data: dict[str, dict[str, str]],
+) -> None:
+    steps = _wizard_steps(wizard_definition)
+    normalized: dict[str, dict[str, str]] = {}
+    has_payload = False
+    for idx, step in enumerate(steps):
+        step_id = str(step.get("id") or f"step_{idx}").strip()
+        raw_payload = draft_data.get(step_id)
+        if not isinstance(raw_payload, dict):
+            continue
+        payload: dict[str, str] = {}
+        for key, value in raw_payload.items():
+            payload[str(key)] = str(value)
+        if payload:
+            normalized[step_id] = payload
+            has_payload = True
+
+    if not steps:
+        first_step_id = ""
+    else:
+        first_step_id = str(steps[0].get("id") or "step_0").strip()
+
+    session_row.current_step_id = first_step_id
+    session_row.draft_data_json = json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+    session_row.status = WIZARD_STATUS_IN_PROGRESS if has_payload else WIZARD_STATUS_NOT_STARTED
+    session_row.completed_at = None
+    session_row.updated_at = datetime.utcnow()
+    db.add(session_row)
+    db.commit()
+    db.refresh(session_row)
+
+
 def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | int]]:
     cards: list[dict[str, str | int]] = []
     user_id = _session_user_id(request)
     tenant_id = "default"
+
+    def _setting_ts(key: str) -> datetime | None:
+        row = db.get(AppSetting, key)
+        return row.updated_at if row else None
 
     for raw in list_wizard_card_definitions():
         wizard_id = str(raw.get("id") or "").strip()
@@ -791,6 +1258,11 @@ def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | i
                     "summary": summary,
                     "route": str(raw.get("technical_route") or "/ui/views"),
                     "action_label": "Apri Query Builder",
+                    "create_route": str(raw.get("technical_route") or "/ui/views"),
+                    "edit_route": str(raw.get("technical_route") or "/ui/views"),
+                    "existing_count": total_views,
+                    "is_multi": 0,
+                    "is_single": 0,
                     "last_updated": _fmt_last_updated(last_view_update) or "n/d",
                     "has_last_updated": bool(last_view_update),
                     "steps_count": total_views,
@@ -800,6 +1272,201 @@ def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | i
                         if status == "completed"
                         else (WIZARD_STATUS_IN_PROGRESS if status == "in_progress" else WIZARD_STATUS_NOT_STARTED)
                     ),
+                }
+            )
+            continue
+
+        if wizard_id == "sync":
+            total = db.query(func.count(Pipeline.id)).scalar() or 0
+            active = db.query(func.count(Pipeline.id)).filter(Pipeline.is_active.is_(True)).scalar() or 0
+            last_update = db.query(func.max(Pipeline.updated_at)).scalar()
+
+            wizard_def = get_wizard_definition(wizard_id) or {}
+            session_row = get_session(db, tenant_id, wizard_id, user_id=user_id)
+            progress = 100 if total > 0 else 0
+            if total > 0:
+                status, status_label, status_class = ("completed", "Completato", "success")
+                summary = f"Pipelines attive: {active} su {total}."
+            elif session_row is not None and session_row.status != WIZARD_STATUS_NOT_STARTED:
+                draft_progress = calculate_progress(session_row, wizard_def)
+                status, status_label, status_class = _wizard_status_display(session_row.status, draft_progress)
+                progress = draft_progress
+                summary = "Nessuna pipeline salvata: bozza wizard in corso."
+                last_update = session_row.updated_at
+            else:
+                status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+                summary = "Nessuna pipeline configurata."
+
+            cards.append(
+                {
+                    **raw,
+                    "progress": progress,
+                    "status": status,
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "summary": summary,
+                    "route": _wizard_url(wizard_id, mode="select"),
+                    "action_label": "Crea o modifica",
+                    "create_route": _wizard_url(wizard_id, mode="new", init=True),
+                    "edit_route": _wizard_url(wizard_id, mode="select"),
+                    "existing_count": total,
+                    "is_multi": 1,
+                    "is_single": 0,
+                    "last_updated": _fmt_last_updated(last_update) or "n/d",
+                    "has_last_updated": bool(last_update),
+                    "steps_count": total,
+                    "completed_steps": active,
+                    "wizard_session_status": session_row.status if session_row else WIZARD_STATUS_NOT_STARTED,
+                }
+            )
+            continue
+
+        if wizard_id == "schedule":
+            total = db.query(func.count(Schedule.id)).scalar() or 0
+            active = db.query(func.count(Schedule.id)).filter(Schedule.is_active.is_(True)).scalar() or 0
+            last_update = db.query(func.max(Schedule.updated_at)).scalar()
+
+            wizard_def = get_wizard_definition(wizard_id) or {}
+            session_row = get_session(db, tenant_id, wizard_id, user_id=user_id)
+            progress = 100 if total > 0 else 0
+            if total > 0:
+                status, status_label, status_class = ("completed", "Completato", "success")
+                summary = f"Schedule attive: {active} su {total}."
+            elif session_row is not None and session_row.status != WIZARD_STATUS_NOT_STARTED:
+                draft_progress = calculate_progress(session_row, wizard_def)
+                status, status_label, status_class = _wizard_status_display(session_row.status, draft_progress)
+                progress = draft_progress
+                summary = "Nessuna schedule salvata: bozza wizard in corso."
+                last_update = session_row.updated_at
+            else:
+                status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+                summary = "Nessuna schedule configurata."
+
+            cards.append(
+                {
+                    **raw,
+                    "progress": progress,
+                    "status": status,
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "summary": summary,
+                    "route": _wizard_url(wizard_id, mode="select"),
+                    "action_label": "Crea o modifica",
+                    "create_route": _wizard_url(wizard_id, mode="new", init=True),
+                    "edit_route": _wizard_url(wizard_id, mode="select"),
+                    "existing_count": total,
+                    "is_multi": 1,
+                    "is_single": 0,
+                    "last_updated": _fmt_last_updated(last_update) or "n/d",
+                    "has_last_updated": bool(last_update),
+                    "steps_count": total,
+                    "completed_steps": active,
+                    "wizard_session_status": session_row.status if session_row else WIZARD_STATUS_NOT_STARTED,
+                }
+            )
+            continue
+
+        if wizard_id == "access":
+            legacy_total = db.query(func.count(ACLRule.id)).scalar() or 0
+            filter_total = db.query(func.count(ACLFilterRule.id)).scalar() or 0
+            legacy_active = db.query(func.count(ACLRule.id)).filter(ACLRule.is_active.is_(True)).scalar() or 0
+            filter_active = db.query(func.count(ACLFilterRule.id)).filter(ACLFilterRule.is_active.is_(True)).scalar() or 0
+            total = legacy_total + filter_total
+            active = legacy_active + filter_active
+            last_legacy = db.query(func.max(ACLRule.updated_at)).scalar()
+            last_filter = db.query(func.max(ACLFilterRule.updated_at)).scalar()
+            last_update = max([ts for ts in [last_legacy, last_filter] if ts is not None], default=None)
+
+            wizard_def = get_wizard_definition(wizard_id) or {}
+            session_row = get_session(db, tenant_id, wizard_id, user_id=user_id)
+            progress = 100 if total > 0 else 0
+            if total > 0:
+                status, status_label, status_class = ("completed", "Completato", "success")
+                summary = f"Regole ACL attive: {active} su {total}."
+            elif session_row is not None and session_row.status != WIZARD_STATUS_NOT_STARTED:
+                draft_progress = calculate_progress(session_row, wizard_def)
+                status, status_label, status_class = _wizard_status_display(session_row.status, draft_progress)
+                progress = draft_progress
+                summary = "Nessuna regola salvata: bozza wizard in corso."
+                last_update = session_row.updated_at
+            else:
+                status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+                summary = "Nessuna regola ACL configurata."
+
+            cards.append(
+                {
+                    **raw,
+                    "progress": progress,
+                    "status": status,
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "summary": summary,
+                    "route": _wizard_url(wizard_id, mode="select"),
+                    "action_label": "Crea o modifica",
+                    "create_route": _wizard_url(wizard_id, mode="new", init=True),
+                    "edit_route": _wizard_url(wizard_id, mode="select"),
+                    "existing_count": total,
+                    "is_multi": 1,
+                    "is_single": 0,
+                    "last_updated": _fmt_last_updated(last_update) or "n/d",
+                    "has_last_updated": bool(last_update),
+                    "steps_count": total,
+                    "completed_steps": active,
+                    "wizard_session_status": session_row.status if session_row else WIZARD_STATUS_NOT_STARTED,
+                }
+            )
+            continue
+
+        if wizard_id in SINGLE_CONFIG_WIZARD_IDS:
+            configured = _single_wizard_is_configured(wizard_id, db)
+            session_row = get_session(db, tenant_id, wizard_id, user_id=user_id)
+            wizard_def = get_wizard_definition(wizard_id) or {}
+
+            if configured:
+                progress = 100
+                status, status_label, status_class = ("completed", "Completato", "success")
+                summary = "Configurazione presente. Apri il wizard per modificare i parametri."
+                if wizard_id == "sap":
+                    last_update = _setting_ts(SQLSERVER_CONN_STR_SETTING_KEY) or _setting_ts(HANA_CONN_STR_SETTING_KEY)
+                else:
+                    last_update = _setting_ts(BQ_PROJECT_ID_SETTING_KEY) or _setting_ts(BQ_DATASET_SETTING_KEY)
+                route = _wizard_url(wizard_id, mode="edit", init=True)
+                action_label = "Modifica configurazione"
+            elif session_row is not None and session_row.status != WIZARD_STATUS_NOT_STARTED:
+                progress = calculate_progress(session_row, wizard_def)
+                status, status_label, status_class = _wizard_status_display(session_row.status, progress)
+                summary = "Bozza in corso. Completa i passaggi per salvare la configurazione."
+                last_update = session_row.updated_at
+                route = _wizard_url(wizard_id, mode="new")
+                action_label = "Riprendi configurazione"
+            else:
+                progress = 0
+                status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+                summary = "Nessuna configurazione salvata."
+                last_update = None
+                route = _wizard_url(wizard_id, mode="new", init=True)
+                action_label = "Avvia configurazione"
+
+            cards.append(
+                {
+                    **raw,
+                    "progress": progress,
+                    "status": status,
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "summary": summary,
+                    "route": route,
+                    "action_label": action_label,
+                    "create_route": route,
+                    "edit_route": route,
+                    "existing_count": 1 if configured else 0,
+                    "is_multi": 0,
+                    "is_single": 1,
+                    "last_updated": _fmt_last_updated(last_update) or "n/d",
+                    "has_last_updated": bool(last_update),
+                    "steps_count": 1 if configured else 0,
+                    "completed_steps": 1 if configured else 0,
+                    "wizard_session_status": session_row.status if session_row else WIZARD_STATUS_NOT_STARTED,
                 }
             )
             continue
@@ -852,8 +1519,13 @@ def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | i
                 "status_label": status_label,
                 "status_class": status_class,
                 "summary": summary,
-                "route": f"/ui/wizard/{wizard_id}",
+                "route": _wizard_url(wizard_id, mode="new" if wizard_id == "full" else None, init=(wizard_id == "full")),
                 "action_label": action_label,
+                "create_route": _wizard_url(wizard_id, mode="new" if wizard_id == "full" else None, init=(wizard_id == "full")),
+                "edit_route": _wizard_url(wizard_id, mode="new" if wizard_id == "full" else None, init=(wizard_id == "full")),
+                "existing_count": 0,
+                "is_multi": 0,
+                "is_single": 0,
                 "last_updated": last_updated_text,
                 "has_last_updated": bool(last_updated),
                 "steps_count": steps_count,
@@ -1324,6 +1996,9 @@ def ui_wizard(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
     step: int | None = Query(default=None),
+    mode: str | None = Query(default=None),
+    target: str | None = Query(default=None),
+    init: str | None = Query(default=None),
 ) -> HTMLResponse:
     if wizard_id == "data":
         return _redirect(
@@ -1331,22 +2006,74 @@ def ui_wizard(
             message="Per 'Dati da esportare' usa il Query Builder (pagina Views).",
         )
 
+    wizard_key = (wizard_id or "").strip().lower()
+    mode_clean = (mode or "").strip().lower()
+    target_clean = (target or "").strip()
+    init_requested = _as_bool(init)
+
+    if wizard_key in MULTI_CONFIG_WIZARD_IDS and not mode_clean:
+        return _redirect(_wizard_url(wizard_key, mode="select"))
+    if wizard_key in SINGLE_CONFIG_WIZARD_IDS and not mode_clean:
+        default_mode = "edit" if _single_wizard_is_configured(wizard_key, db) else "new"
+        return _redirect(_wizard_url(wizard_key, mode=default_mode, init=True))
+
+    if wizard_key in MULTI_CONFIG_WIZARD_IDS and mode_clean == "select":
+        cards = _build_wizard_cards(request, db)
+        card = next((c for c in cards if str(c.get("id")) == wizard_key), None)
+        if card is None:
+            return _redirect("/ui/configurations", error=f"Wizard '{wizard_key}' non disponibile.")
+        return templates.TemplateResponse(
+            request=request,
+            name="wizard_select.html",
+            context={
+                "app_name": settings.app_name,
+                "active_nav": "configurations",
+                "wizard": card,
+                "create_route": _wizard_url(wizard_key, mode="new", init=True),
+                "entries": _wizard_existing_entries(wizard_key, db),
+                "message": message,
+                "error": error,
+            },
+        )
+
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
-    row = _enrich_wizard_runtime_definition(wizard_id, row, db)
+    row = _enrich_wizard_runtime_definition(wizard_key, row, db)
 
     steps_count = _wizard_step_count(row)
     if steps_count <= 0:
         return _redirect("/ui/configurations", error="Wizard non configurato.")
 
     user_id = _session_user_id(request)
-    session_row = get_or_create_session(db, "default", wizard_id, user_id=user_id)
+    session_row = get_or_create_session(db, "default", wizard_key, user_id=user_id)
+
+    if mode_clean not in {"", "new", "edit"}:
+        return _redirect(_wizard_url(wizard_key, mode="select") if wizard_key in MULTI_CONFIG_WIZARD_IDS else "/ui/configurations", error="Modalita wizard non valida.")
+    if wizard_key in MULTI_CONFIG_WIZARD_IDS and mode_clean == "edit" and not target_clean:
+        return _redirect(_wizard_url(wizard_key, mode="select"), error="Seleziona prima una configurazione da modificare.")
+
+    if init_requested and mode_clean == "new":
+        _wizard_reset_session_with_prefill(db, session_row, row, {})
+
+    if init_requested and mode_clean == "edit":
+        if wizard_key in SINGLE_CONFIG_WIZARD_IDS:
+            prefill = _wizard_prefill_from_single_settings(wizard_key, db)
+            if not prefill:
+                return _redirect(_wizard_url(wizard_key, mode="new", init=True), error="Configurazione non trovata: avvio setup da zero.")
+            _wizard_reset_session_with_prefill(db, session_row, row, prefill)
+        elif wizard_key in MULTI_CONFIG_WIZARD_IDS:
+            prefill, prefill_error = _wizard_prefill_from_multi_target(wizard_key, target_clean, db)
+            if prefill_error:
+                return _redirect(_wizard_url(wizard_key, mode="select"), error=prefill_error)
+            if prefill is None:
+                return _redirect(_wizard_url(wizard_key, mode="select"), error="Nessuna configurazione selezionata.")
+            _wizard_reset_session_with_prefill(db, session_row, row, prefill)
 
     # Temporary compatibility fallback: import old browser draft only once if DB draft is still empty.
     db_draft = read_draft_data(session_row)
     if not db_draft:
-        legacy_entry = _wizard_load_draft_entry(request, wizard_id)
+        legacy_entry = _wizard_load_draft_entry(request, wizard_key)
         legacy_data = legacy_entry.get("data")
         if isinstance(legacy_data, dict) and legacy_data:
             for step_key, payload in legacy_data.items():
@@ -1374,9 +2101,9 @@ def ui_wizard(
             session_row = move_to_step(db, session_row, forced_step_id)
 
     cards = _build_wizard_cards(request, db)
-    card = next((c for c in cards if str(c["id"]) == wizard_id), None)
+    card = next((c for c in cards if str(c["id"]) == wizard_key), None)
     if card is None:
-        return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non disponibile.")
+        return _redirect("/ui/configurations", error=f"Wizard '{wizard_key}' non disponibile.")
 
     draft_data = read_draft_data(session_row)
     wizard_ctx = _wizard_render_context(wizard=row, step_index=current_step_index, draft_data=draft_data)
@@ -1389,6 +2116,12 @@ def ui_wizard(
     card_display["status_label"] = wizard_status_label
     card_display["status_class"] = wizard_status_class
 
+    form_action = _wizard_url(wizard_key, mode=mode_clean or None, target=target_clean or None)
+    if wizard_key in MULTI_CONFIG_WIZARD_IDS:
+        close_url = _wizard_url(wizard_key, mode="select")
+    else:
+        close_url = "/ui/configurations"
+
     return templates.TemplateResponse(
         request=request,
         name="wizard.html",
@@ -1398,6 +2131,10 @@ def ui_wizard(
             "wizard": card_display,
             "wizard_meta": row,
             "technical_route": card["technical_route"],
+            "wizard_mode": mode_clean or "new",
+            "wizard_target": target_clean,
+            "wizard_form_action": form_action,
+            "wizard_close_url": close_url,
             "draft_data": draft_data,
             "wizard_session": session_row,
             **wizard_ctx,
@@ -1419,13 +2156,19 @@ async def ui_wizard_action(
             message="Per 'Dati da esportare' usa il Query Builder (pagina Views).",
         )
 
-    row = _wizard_definition_by_id(wizard_id)
+    wizard_key = (wizard_id or "").strip().lower()
+
+    row = _wizard_definition_by_id(wizard_key)
     if row is None:
-        return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
-    row = _enrich_wizard_runtime_definition(wizard_id, row, db)
+        return _redirect("/ui/configurations", error=f"Wizard '{wizard_key}' non riconosciuto.")
+    row = _enrich_wizard_runtime_definition(wizard_key, row, db)
 
     form = await request.form()
+    mode_clean = str(form.get("mode", "")).strip().lower()
+    target_clean = str(form.get("target", "")).strip()
     action = str(form.get("action", "continue")).strip().lower()
+    wizard_path = _wizard_url(wizard_key, mode=mode_clean or None, target=target_clean or None)
+
     try:
         step_index = int(str(form.get("step_index", "0")).strip() or "0")
     except ValueError:
@@ -1434,10 +2177,10 @@ async def ui_wizard_action(
     steps = _wizard_steps(row)
     steps_count = len(steps)
     if not steps:
-        return _redirect("/ui/wizard/" + wizard_id, error="Wizard non configurato.")
+        return _redirect(wizard_path, error="Wizard non configurato.")
 
     user_id = _session_user_id(request)
-    session_row = get_or_create_session(db, "default", wizard_id, user_id=user_id)
+    session_row = get_or_create_session(db, "default", wizard_key, user_id=user_id)
     current_step_index = _wizard_step_index_by_id(row, session_row.current_step_id)
     current_step_id = _wizard_step_id_by_index(row, current_step_index)
     if session_row.current_step_id != current_step_id:
@@ -1457,7 +2200,7 @@ async def ui_wizard_action(
         and current_step_index >= steps_count - 1
     ):
         return _redirect(
-            f"/ui/wizard/{wizard_id}",
+            wizard_path,
             message="Wizard gia completato.",
         )
 
@@ -1501,11 +2244,11 @@ async def ui_wizard_action(
 
     if action == "back":
         move_back(db, session_row, row)
-        return _redirect(f"/ui/wizard/{wizard_id}")
+        return _redirect(wizard_path)
 
     if action == "save":
         return _redirect(
-            f"/ui/wizard/{wizard_id}",
+            wizard_path,
             message="Bozza wizard salvata.",
         )
 
@@ -1517,11 +2260,11 @@ async def ui_wizard_action(
             if len(missing_required) > 3:
                 suffix = f" (+{len(missing_required) - 3} altri campi)"
             return _redirect(
-                f"/ui/wizard/{wizard_id}",
+                wizard_path,
                 error=f"Compila i campi obbligatori prima della conferma finale: {preview}{suffix}",
             )
         completion_message = "Wizard completato."
-        if wizard_id == "sap":
+        if wizard_key == "sap":
             try:
                 completion_message = _apply_sap_wizard_to_settings(db, session_row)
             except (ValueError, SQLServerPublishError) as exc:
@@ -1532,12 +2275,22 @@ async def ui_wizard_action(
                     str(exc),
                 )
                 return _redirect(
-                    f"/ui/wizard/{wizard_id}",
+                    wizard_path,
                     error=f"Conferma finale non completata: {exc}",
                 )
-        elif wizard_id == "sync":
+        elif wizard_key == "sync":
+            target_pipeline_id = None
+            if mode_clean == "edit" and target_clean:
+                try:
+                    target_pipeline_id = int(target_clean)
+                except ValueError:
+                    target_pipeline_id = None
             try:
-                completion_message = _apply_sync_wizard_to_pipeline(db, session_row)
+                completion_message = _apply_sync_wizard_to_pipeline(
+                    db,
+                    session_row,
+                    target_pipeline_id=target_pipeline_id,
+                )
             except ValueError as exc:
                 set_test_result(
                     db,
@@ -1546,17 +2299,41 @@ async def ui_wizard_action(
                     str(exc),
                 )
                 return _redirect(
-                    f"/ui/wizard/{wizard_id}",
+                    wizard_path,
+                    error=f"Conferma finale non completata: {exc}",
+                )
+        elif wizard_key == "schedule":
+            target_schedule_id = None
+            if mode_clean == "edit" and target_clean:
+                try:
+                    target_schedule_id = int(target_clean)
+                except ValueError:
+                    target_schedule_id = None
+            try:
+                completion_message = _apply_schedule_wizard_to_schedule(
+                    db,
+                    session_row,
+                    target_schedule_id=target_schedule_id,
+                )
+            except ValueError as exc:
+                set_test_result(
+                    db,
+                    session_row,
+                    WIZARD_STATUS_TEST_FAILED,
+                    str(exc),
+                )
+                return _redirect(
+                    wizard_path,
                     error=f"Conferma finale non completata: {exc}",
                 )
         mark_completed(db, session_row)
         return _redirect(
-            f"/ui/wizard/{wizard_id}",
+            wizard_path,
             message=completion_message,
         )
 
     move_next(db, session_row, row)
-    return _redirect(f"/ui/wizard/{wizard_id}")
+    return _redirect(wizard_path)
 
 
 @router.get("/ui/summaries", response_class=HTMLResponse)

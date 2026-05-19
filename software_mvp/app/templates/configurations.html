@@ -38,7 +38,7 @@
     </div>
 
     <div class="wizard-actions">
-      <a href="/ui/wizard/full" class="btn primary">Avvia setup completo</a>
+      <a href="{{ full_card.route }}" class="btn primary">Avvia setup completo</a>
     </div>
   </article>
 </div>
@@ -73,7 +73,18 @@
     </div>
 
     <div class="wizard-actions">
-      <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }}</a>
+      {% if w.id == "data" %}
+        <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }}</a>
+      {% elif w.is_multi %}
+        <a href="{{ w.create_route }}" class="btn primary btn-xs">Crea nuovo</a>
+        {% if w.existing_count and w.existing_count > 0 %}
+          <a href="{{ w.edit_route }}" class="btn secondary btn-xs">Modifica esistente</a>
+        {% else %}
+          <span class="muted">Nessuna configurazione esistente</span>
+        {% endif %}
+      {% else %}
+        <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }}</a>
+      {% endif %}
     </div>
   </article>
   {% endfor %}
