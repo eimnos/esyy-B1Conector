@@ -215,7 +215,7 @@
                     name="field__{{ field.id }}"
                     {% if field.required %}required{% endif %}
                   >
-                    {% for opt in field.options if field.options else [] %}
+                    {% for opt in (field.options or []) %}
                       <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
                     {% endfor %}
                   </select>
@@ -241,7 +241,7 @@
                       name="field__{{ field.id }}"
                       {% if field.required %}required{% endif %}
                     >
-                      {% for opt in field.options if field.options else [] %}
+                      {% for opt in (field.options or []) %}
                         <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
                       {% endfor %}
                     </select>
@@ -268,7 +268,7 @@
                       name="field__{{ field.id }}"
                       {% if field.required %}required{% endif %}
                     >
-                      {% for opt in field.options if field.options else [] %}
+                      {% for opt in (field.options or []) %}
                         <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
                       {% endfor %}
                     </select>
@@ -299,7 +299,7 @@
                   <label>{{ field.label }}</label>
                   {% if field.input_type == "select" %}
                     <select name="field__{{ field.id }}">
-                      {% for opt in field.options %}
+                      {% for opt in (field.options or []) %}
                         <option value="{{ opt.value }}" {% if current_payload.get(field.id, '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
                       {% endfor %}
                     </select>
