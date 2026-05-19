@@ -9,11 +9,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from .api.routes import acl, pipelines, query_builder, schedules, system, views
+from .api.routes import acl, license, pipelines, query_builder, schedules, system, views
 from .config import settings
 from .database import SessionLocal, init_db
 from .services.scheduler_service import init_scheduler, shutdown_scheduler
 from .services.auth_service import ROLE_ADMIN, ROLE_OPERATOR, ensure_default_admin
+from .services.license_service import check_license
 from .ui_routes import router as ui_router
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -29,6 +30,7 @@ app.include_router(pipelines.router)
 app.include_router(schedules.router)
 app.include_router(acl.router)
 app.include_router(query_builder.router)
+app.include_router(license.router)
 app.include_router(ui_router)
 
 
@@ -83,6 +85,8 @@ async def auth_middleware(request, call_next):
             "username": username,
             "role": role,
         }
+        # TODO(license): future enforcement hook.
+        # Keep non-blocking in this phase; should_block_app() currently always returns False.
 
         # Admin-only areas
         if (path.startswith("/ui/users") or path.startswith("/ui/settings")) and role != ROLE_ADMIN:
@@ -131,6 +135,7 @@ def startup() -> None:
             username=settings.app_admin_username,
             password=settings.app_admin_password,
         )
+        check_license(db)
     finally:
         db.close()
     init_scheduler()

@@ -44,6 +44,12 @@ from .services.sqlserver_service import (
     publish_view,
     test_sqlserver_connection,
 )
+from .services.license_service import (
+    activate_open_trial,
+    check_license,
+    get_license_status,
+    reset_local_state,
+)
 from .services.wizard_definitions import get_wizard_definition, list_wizard_card_definitions
 from .services.wizard_session_service import (
     WIZARD_STATUS_COMPLETED,
@@ -122,6 +128,13 @@ def _redirect(
     query = urlencode(params) if params else ""
     url = urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
     return RedirectResponse(url=url, status_code=303)
+
+
+def _data_studio_refresh_hint() -> str:
+    return (
+        "Promemoria Data Studio: apri il report, vai su Risorse > Gestisci origini dati aggiunte > "
+        "Modifica origine dati > Aggiorna campi (o Riconnetti), poi aggiorna il report."
+    )
 
 
 def _as_bool(value: str | None) -> bool:
@@ -1890,7 +1903,7 @@ def _render_overview(
             "route": "/ui/wizard/schedule",
         },
         {
-            "label": "Looker Studio",
+            "label": "Data Studio",
             "ok": looker_ok,
             "value": "Setup completato" if looker_ok else "Configurazione incompleta",
             "status_class": "success" if looker_ok else "warning",
@@ -2450,7 +2463,7 @@ def ui_monitoring(
             "status_class": "success" if scheduler_ok else "warning",
         },
         {
-            "label": "Looker Studio",
+            "label": "Data Studio",
             "ok": looker_ok,
             "status_label": "OK" if looker_ok else "Da verificare",
             "status_class": "success" if looker_ok else "warning",
@@ -2537,6 +2550,70 @@ def ui_advanced(
             "message": message,
             "error": error,
         },
+    )
+
+
+@router.get("/ui/license", response_class=HTMLResponse)
+def ui_license(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    status_payload = get_license_status(db)
+    features = status_payload.get("features")
+    if not isinstance(features, dict):
+        features = {}
+    current_user = getattr(request.state, "current_user", None)
+    role = str(current_user.get("role") or "").strip().lower() if isinstance(current_user, dict) else ""
+    can_write = role in {ROLE_ADMIN, ROLE_OPERATOR}
+    return templates.TemplateResponse(
+        request=request,
+        name="license.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "license",
+            "license": status_payload,
+            "features": sorted(features.items(), key=lambda x: str(x[0])),
+            "can_write": can_write,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/ui/license/activate-open-trial")
+def ui_license_activate_open_trial(
+    db: Session = Depends(get_db),
+    customer_name: str = Form(default=""),
+    customer_email: str = Form(default=""),
+) -> RedirectResponse:
+    activate_open_trial(
+        db,
+        customer_name=customer_name.strip() or None,
+        customer_email=customer_email.strip() or None,
+    )
+    return _redirect(
+        "/ui/license",
+        message="Modalita prova gratuita aperta attivata. Nessuna funzionalita bloccata.",
+    )
+
+
+@router.post("/ui/license/check")
+def ui_license_check(db: Session = Depends(get_db)) -> RedirectResponse:
+    row = check_license(db)
+    return _redirect(
+        "/ui/license",
+        message=f"Verifica licenza completata. Stato: {row.status}.",
+    )
+
+
+@router.post("/ui/license/reset-local")
+def ui_license_reset_local(db: Session = Depends(get_db)) -> RedirectResponse:
+    reset_local_state(db)
+    return _redirect(
+        "/ui/license",
+        message="Stato licenza locale resettato.",
     )
 
 
@@ -2630,7 +2707,8 @@ def ui_view_update(
         return _redirect("/ui/views", error="View non trovata.")
 
     new_sql = select_sql.strip()
-    if new_sql != row.select_sql:
+    sql_changed = new_sql != row.select_sql
+    if sql_changed:
         row.version += 1
 
     row.tenant_code = tenant_code.strip() or "default"
@@ -2645,7 +2723,10 @@ def ui_view_update(
     except IntegrityError as exc:
         db.rollback()
         return _redirect(f"/ui/views/{view_id}", error=f"Errore aggiornamento view: {exc}")
-    return _redirect(f"/ui/views/{view_id}", message="View aggiornata.")
+    message = "View aggiornata."
+    if sql_changed:
+        message = f"{message} {_data_studio_refresh_hint()}"
+    return _redirect(f"/ui/views/{view_id}", message=message)
 
 
 @router.post("/ui/views/{view_id}/publish")
@@ -2665,7 +2746,8 @@ def ui_view_publish(view_id: int, db: Session = Depends(get_db)) -> RedirectResp
         message=(
             "View pubblicata su SQL Server: "
             f"{publish_result.server_name} / {publish_result.db_name} / "
-            f"{publish_result.schema_name}.{publish_result.view_name}"
+            f"{publish_result.schema_name}.{publish_result.view_name}. "
+            f"{_data_studio_refresh_hint()}"
         ),
     )
 

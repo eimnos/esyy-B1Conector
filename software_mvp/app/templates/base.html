@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title if title else app_name }}</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/css/esyy-ui.css?v=20260501-modal2">
+  <link rel="stylesheet" href="/static/app.css?v=20260519-sidebar1">
+  <link rel="stylesheet" href="/static/css/esyy-ui.css?v=20260519-sidebar1">
 </head>
 <body class="theme-office app-b1connector" data-active-nav="{{ active_nav if active_nav is defined else '' }}">
   {% set role = request.state.current_user.role if request.state.current_user else '' %}
@@ -21,6 +21,8 @@
     {% set nav_key = 'summaries' %}
   {% elif active in ['monitoring'] %}
     {% set nav_key = 'monitoring' %}
+  {% elif active in ['license'] %}
+    {% set nav_key = 'license' %}
   {% elif active in ['advanced'] %}
     {% set nav_key = 'advanced' %}
   {% endif %}
@@ -35,28 +37,32 @@
         </div>
       </a>
       <nav class="sidebar-nav">
-        <a href="/ui/overview" class="sidebar-link {{ 'active' if nav_key == 'overview' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM7 8h4v4H7zm6 0h4v2h-4zm0 4h4v2h-4zM7 14h4v2H7z"/></svg>
+        <a href="/ui/overview" class="sidebar-link {{ 'active' if nav_key == 'overview' else '' }}" title="Panoramica">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3zm10 0h8v5h-8V3zM3 13h8v8H3v-8zm10-3h8v11h-8V10z"/></svg>
           <span>Panoramica</span>
         </a>
-        <a href="/ui/configurations" class="sidebar-link {{ 'active' if nav_key == 'configurations' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v3H3zm0 5h18v3H3zm0 5h12v3H3z"/></svg>
+        <a href="/ui/configurations" class="sidebar-link {{ 'active' if nav_key == 'configurations' else '' }}" title="Configurazioni">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9v2H4V7zm0 8h16v2H4v-2zm11-9h5v4h-5V6zm-6 7h5v4H9v-4z"/></svg>
           <span>Configurazioni</span>
         </a>
-        <a href="/ui/summaries" class="sidebar-link {{ 'active' if nav_key == 'summaries' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zm3 3h8v2H8zm0 4h8v2H8zm0 4h5v2H8z"/></svg>
+        <a href="/ui/summaries" class="sidebar-link {{ 'active' if nav_key == 'summaries' else '' }}" title="Riepiloghi">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v3h3v17H4V5h3V2zm2 3h6V4H9v1zm-3 2v13h12V7H6zm2 3h8v2H8v-2zm0 4h8v2H8v-2z"/></svg>
           <span>Riepiloghi</span>
         </a>
-        <a href="/ui/monitoring" class="sidebar-link {{ 'active' if nav_key == 'monitoring' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16v2H4zm1-3h3l2-4 3 6 2-4h4v2h-3l-2 4-3-6-2 4H5z"/></svg>
+        <a href="/ui/monitoring" class="sidebar-link {{ 'active' if nav_key == 'monitoring' else '' }}" title="Monitoraggio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19h18v2H3v-2zm1-2 4-5 3 3 5-7 4 6v3h-2v-2l-2-3-5 7-3-3-2 2H4v-1z"/></svg>
           <span>Monitoraggio</span>
         </a>
-        <a href="/ui/users-access" class="sidebar-link {{ 'active' if nav_key == 'users_access' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-7 8a7 7 0 0 1 14 0zM18 9V7h-2V5h2V3h2v2h2v2h-2v2z"/></svg>
+        <a href="/ui/users-access" class="sidebar-link {{ 'active' if nav_key == 'users_access' else '' }}" title="Utenti e accessi">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-7 8a7 7 0 0 1 14 0H3zm14-9 4-2 4 2v3c0 2.8-1.8 5.2-4 6-2.2-.8-4-3.2-4-6v-3zm2 1.2v1.8c0 1.7 1 3.3 2 4 1-.7 2-2.3 2-4v-1.8l-2-1-2 1z"/></svg>
           <span>Utenti e accessi</span>
         </a>
-        <a href="/ui/advanced" class="sidebar-link {{ 'active' if nav_key == 'advanced' else '' }}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H5a2 2 0 0 0-2 2v9h2V4h9zM9 7h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm1 3v2h8v-2zm0 4v2h5v-2z"/></svg>
+        <a href="/ui/license" class="sidebar-link {{ 'active' if nav_key == 'license' else '' }}" title="Licenza">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a2 2 0 0 1 2 2v6h-2V5H5v14h6v2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm8 9 2-2 6 6-2 2-2-2-2 2-2-2 2-2-2-2z"/></svg>
+          <span>Licenza</span>
+        </a>
+        <a href="/ui/advanced" class="sidebar-link {{ 'active' if nav_key == 'advanced' else '' }}" title="Avanzate">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 13v-2l-2.1-.4a8 8 0 0 0-.7-1.7l1.2-1.8-1.4-1.4-1.8 1.2a8 8 0 0 0-1.7-.7L15 4h-2l-.4 2.1a8 8 0 0 0-1.7.7L9.1 5.6 7.7 7l1.2 1.8a8 8 0 0 0-.7 1.7L6 11v2l2.1.4a8 8 0 0 0 .7 1.7L7.6 17l1.4 1.4 1.8-1.2a8 8 0 0 0 1.7.7L13 20h2l.4-2.1a8 8 0 0 0 1.7-.7l1.8 1.2 1.4-1.4-1.2-1.8a8 8 0 0 0 .7-1.7L22 13zM14 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>
           <span>Avanzate</span>
         </a>
       </nav>
@@ -111,6 +117,6 @@
     <p class="muted" data-guide-intro></p>
     <div class="guide-scroll" data-guide-content></div>
   </aside>
-  <script src="/static/ui_helpers.js"></script>
+  <script src="/static/ui_helpers.js?v=20260519-guides4"></script>
 </body>
 </html>

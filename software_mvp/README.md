@@ -39,6 +39,7 @@ Apri:
 - UI Pipelines: `http://127.0.0.1:8010/ui/pipelines`
 - UI Schedules: `http://127.0.0.1:8010/ui/schedules`
 - UI ACL: `http://127.0.0.1:8010/ui/acl`
+- UI License: `http://127.0.0.1:8010/ui/license`
 - UI Settings (solo admin): `http://127.0.0.1:8010/ui/settings`
 - UI Users (solo admin): `http://127.0.0.1:8010/ui/users`
 
@@ -141,11 +142,39 @@ In `.env`:
 - `BQ_LOCATION`: location BigQuery (`EU`, `US`, ...)
 - `BQ_CREDENTIALS_FILE`: path locale JSON service account (se vuoto usa ADC)
 - `PIPELINE_COMMAND_TIMEOUT_SECONDS`: timeout comando pipeline
+- `ESYY_PRODUCT_CODE`: codice prodotto locale (default `esyy-b1-connector`)
+- `ESYY_LICENSE_MODE`: modalita licensing (`open_trial`, `local_file`, `portal`)
+- `ESYY_LICENSE_PORTAL_URL`: URL portale Esyy (futuro, opzionale)
+- `ESYY_LICENSE_CHECK_TIMEOUT_SECONDS`: timeout check remoto futuro
+- `ESYY_LICENSE_GRACE_DAYS`: grace period previsto per enforcement futuro
+- `ESYY_LICENSE_FILE`: path file licenza locale (modo `local_file`)
 
 Nota `APP_DB_URL`:
 
 - se lasci `sqlite:///./configurator.db`, l'app lo normalizza automaticamente su
   `C:\BigQuery\software_mvp\configurator.db` (cartella applicazione), evitando drift dati dovuti alla working directory.
+
+## Licensing (fase attuale: non bloccante)
+
+- Pagina UI: `/ui/license`
+- Endpoint API:
+  - `GET /api/license/status`
+  - `POST /api/license/activate-open-trial`
+  - `POST /api/license/check`
+  - `POST /api/license/reset-local`
+
+Comportamento attuale:
+
+- modalita di default `open_trial`
+- nessun blocco funzionale applicato
+- tutte le features risultano abilitate
+- app pienamente utilizzabile anche offline
+
+Comportamento futuro previsto:
+
+- integrazione con portale Esyy in modalita `portal`
+- eventuale file licenza locale in modalita `local_file`
+- possibile enforcement via `should_block_app` (oggi sempre `False`)
 
 ## Ruoli e accessi
 

@@ -14,6 +14,10 @@ def _as_int(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None:
         return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 
 def _default_sqlite_url() -> str:
@@ -28,10 +32,20 @@ def _normalize_app_db_url(raw_value: str | None) -> str:
         rel = value[len("sqlite:///./") :]
         return f"sqlite:///{(APP_ROOT / rel).as_posix()}"
     return value
-    try:
-        return int(value)
-    except ValueError:
+
+
+def _default_license_file() -> str:
+    return str((APP_ROOT / "license.json").resolve())
+
+
+def _normalize_local_path(raw_value: str | None, *, default: str) -> str:
+    value = (raw_value or "").strip()
+    if not value:
         return default
+    path = Path(value)
+    if path.is_absolute():
+        return str(path)
+    return str((APP_ROOT / path).resolve())
 
 
 @dataclass(frozen=True)
@@ -49,6 +63,12 @@ class Settings:
     bq_location: str
     bq_credentials_file: str
     pipeline_command_timeout_seconds: int
+    esyy_product_code: str
+    esyy_license_mode: str
+    esyy_license_portal_url: str
+    esyy_license_check_timeout_seconds: int
+    esyy_license_grace_days: int
+    esyy_license_file: str
 
 
 settings = Settings(
@@ -65,4 +85,13 @@ settings = Settings(
     bq_location=os.getenv("BQ_LOCATION", "EU"),
     bq_credentials_file=os.getenv("BQ_CREDENTIALS_FILE", ""),
     pipeline_command_timeout_seconds=_as_int("PIPELINE_COMMAND_TIMEOUT_SECONDS", 3600),
+    esyy_product_code=os.getenv("ESYY_PRODUCT_CODE", "esyy-b1-connector").strip() or "esyy-b1-connector",
+    esyy_license_mode=os.getenv("ESYY_LICENSE_MODE", "open_trial").strip().lower() or "open_trial",
+    esyy_license_portal_url=os.getenv("ESYY_LICENSE_PORTAL_URL", "").strip(),
+    esyy_license_check_timeout_seconds=_as_int("ESYY_LICENSE_CHECK_TIMEOUT_SECONDS", 10),
+    esyy_license_grace_days=_as_int("ESYY_LICENSE_GRACE_DAYS", 15),
+    esyy_license_file=_normalize_local_path(
+        os.getenv("ESYY_LICENSE_FILE"),
+        default=_default_license_file(),
+    ),
 )

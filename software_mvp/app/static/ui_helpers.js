@@ -124,227 +124,387 @@
     const activeNav = String(document.body.getAttribute("data-active-nav") || "").trim().toLowerCase();
     const guides = {
       overview: {
-        title: "Dashboard",
-        intro: "Controllo rapido stato configurazione, run e integrita generale.",
+        title: "Panoramica",
+        intro: "Stato globale del connettore: avanzamento wizard, salute sistema e run recenti.",
         sections: [
           {
-            heading: "Check iniziale",
+            heading: "Significato voci pagina",
             steps: [
-              "Verifica eventuali messaggi rossi in alto.",
-              "Controlla i contatori Views/Pipelines/Schedules.",
-              "Apri gli ultimi run e cerca eventuali status KO."
+              "Riquadri KPI: quantita di view, pipeline, schedule e run registrati.",
+              "Check sistema: semaforo per SAP, BigQuery, Scheduler e Data Studio.",
+              "Run recenti: ultimi job eseguiti con stato, orario e messaggio."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (controllo rapido 60 secondi)",
+            steps: [
+              "1) Guarda i messaggi in alto: se rosso, leggi il testo completo.",
+              "2) Apri il primo check non OK e clicca 'Apri wizard' per correggere.",
+              "3) Nella tabella run, verifica che gli ultimi record siano 'OK'."
             ]
           }
         ]
       },
       dashboard: {
-        title: "Dashboard",
-        intro: "Controllo rapido stato configurazione, run e integrita generale.",
+        title: "Panoramica",
+        intro: "Stato globale del connettore: avanzamento wizard, salute sistema e run recenti.",
         sections: [
           {
-            heading: "Check iniziale",
+            heading: "Significato voci pagina",
             steps: [
-              "Verifica eventuali messaggi rossi in alto.",
-              "Controlla i contatori Views/Pipelines/Schedules.",
-              "Apri gli ultimi run e cerca eventuali status KO."
+              "Riquadri KPI: quantita di view, pipeline, schedule e run registrati.",
+              "Check sistema: semaforo per SAP, BigQuery, Scheduler e Data Studio.",
+              "Run recenti: ultimi job eseguiti con stato, orario e messaggio."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (controllo rapido 60 secondi)",
+            steps: [
+              "1) Guarda i messaggi in alto: se rosso, leggi il testo completo.",
+              "2) Apri il primo check non OK e clicca 'Apri wizard' per correggere.",
+              "3) Nella tabella run, verifica che gli ultimi record siano 'OK'."
             ]
           }
         ]
       },
       configurations: {
-        title: "Configurazioni guidate",
-        intro: "Questa pagina e il punto di ingresso principale ai wizard.",
+        title: "Configurazioni",
+        intro: "Pagina operativa: da qui crei o modifichi tutte le configurazioni.",
         sections: [
           {
-            heading: "Flusso consigliato",
+            heading: "Significato voci pagina",
             steps: [
-              "Parti da Connessione SAP B1 e completa in ordine le card.",
-              "Usa Apri wizard per configurare o correggere una sezione.",
-              "Evita modifiche tecniche dirette se non strettamente necessarie."
+              "Card 'Configurazione completa da zero': percorso guidato end-to-end.",
+              "Badge stato: Da configurare, Bozza, Pronto conferma, Completato, Errore test.",
+              "Progress %: avanzamento del wizard o stato reale della configurazione.",
+              "Per wizard multi-config (sync, schedule, access): pulsanti 'Crea nuovo' e 'Modifica esistente'.",
+              "Per wizard singoli (sap, bigquery): pulsante unico di avvio/modifica precompilata."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (nuovo cliente)",
+            steps: [
+              "1) Clicca 'Connessione SAP B1' e completa fino a conferma finale.",
+              "2) Clicca 'Connessione BigQuery' e completa il wizard.",
+              "3) In 'Dati da esportare' clicca 'Apri Query Builder' e crea almeno una view.",
+              "4) In 'Sincronizzazione' clicca 'Crea nuovo' e configura pipeline.",
+              "5) In 'Pianificazione' clicca 'Crea nuovo' e imposta cron.",
+              "6) Completa 'Accessi dati clienti' e poi 'Data Studio' e 'Monitoraggio'."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (modifica configurazione esistente)",
+            steps: [
+              "1) Sulla card desiderata clicca 'Modifica esistente'.",
+              "2) Nella lista seleziona la configurazione e clicca 'Modifica'.",
+              "3) Verifica i campi precompilati, cambia solo il necessario e conferma."
             ]
           }
         ]
       },
       summaries: {
         title: "Riepiloghi",
-        intro: "Vista sintetica dello stato configurazioni da condividere con il cliente.",
+        intro: "Pagina sola lettura: stato consolidato da usare per verifica e passaggio consegne.",
         sections: [
           {
-            heading: "Uso operativo",
+            heading: "Significato voci pagina",
             steps: [
-              "Controlla badge stato e percentuale di ogni wizard.",
-              "Apri Modifica con wizard per intervenire su una configurazione.",
-              "Usa questa pagina come check finale di collaudo."
+              "Ogni card rappresenta una macro-area configurativa.",
+              "Badge + progress mostrano lo stato reale corrente.",
+              "Ultima modifica indica quando la configurazione e stata aggiornata."
+            ]
+          },
+          {
+            heading: "Uso corretto",
+            steps: [
+              "Non ci sono azioni operative in questa pagina.",
+              "Se trovi un problema, vai su 'Configurazioni' e intervieni da li.",
+              "Usa questa vista per audit veloce prima del go-live."
             ]
           }
         ]
       },
       monitoring: {
         title: "Monitoraggio",
-        intro: "Stato sistema, alert e storico run pipeline.",
+        intro: "Controllo operativo: salute componenti, alert e storico esecuzioni.",
         sections: [
           {
-            heading: "Cosa controllare",
+            heading: "Significato voci pagina",
             steps: [
-              "Verifica i controlli SAP/BigQuery/Scheduler/Looker.",
-              "Dai priorita agli alert con CTA Risolvi con wizard.",
-              "Controlla i run con status KO e correggi dalla configurazione guidata."
+              "Check sistema: esito di SAP, BigQuery, scheduler e ACL/Data Studio.",
+              "Alert aperti: problemi che richiedono azione immediata.",
+              "Storico run: log delle esecuzioni pipeline con esito e messaggio."
+            ]
+          },
+          {
+            heading: "Cosa cliccare quando c'e un errore",
+            steps: [
+              "1) Clicca la CTA del check/alert in errore.",
+              "2) Correggi la configurazione nel wizard collegato.",
+              "3) Esegui un run di test e torna qui per confermare lo stato OK."
             ]
           }
         ]
       },
       users_access: {
         title: "Utenti e accessi",
-        intro: "Gestione utenti app e filtri di visibilita dati.",
+        intro: "Gestione sicurezza applicativa e accesso dati.",
         sections: [
           {
-            heading: "Pratica consigliata",
+            heading: "Significato voci pagina",
             steps: [
-              "Configura i filtri da Wizard Accessi dati.",
-              "Usa ACL raw solo per casi speciali o troubleshooting.",
-              "Mantieni ruoli utente coerenti (Admin/Operator/Viewer)."
+              "Utenti app: account che accedono al portale Esyy B1Connector.",
+              "Ruoli: admin (completo), operator (operativo), viewer (sola lettura).",
+              "Accessi dati: demandati al wizard ACL / pagina ACL tecnica."
+            ]
+          },
+          {
+            heading: "Flusso consigliato",
+            steps: [
+              "1) Crea utente in base al ruolo reale.",
+              "2) Vai su Configurazioni -> Accessi dati clienti.",
+              "3) Crea o modifica le regole ACL e poi verifica su Data Studio."
+            ]
+          }
+        ]
+      },
+      license: {
+        title: "Licenza",
+        intro: "Stato licenza locale e preparazione all'integrazione futura col portale Esyy.",
+        sections: [
+          {
+            heading: "Significato voci pagina",
+            steps: [
+              "Product code: identificativo fisso del prodotto locale.",
+              "Installation ID: identificativo univoco dell'installazione cliente.",
+              "Modalita: open_trial, local_file o portal.",
+              "Stato: valore informativo della verifica licenza (non bloccante in questa fase).",
+              "Features: elenco funzionalita previste, oggi tutte abilitate in open_trial."
+            ]
+          },
+          {
+            heading: "Cosa cliccare",
+            steps: [
+              "1) Clicca 'Attiva prova gratuita' per impostare stato aperto non bloccante.",
+              "2) Clicca 'Verifica licenza' per aggiornare last_check e messaggio stato.",
+              "3) Clicca 'Reset stato licenza locale' se vuoi ripulire lo stato senza toccare configurazioni operative."
             ]
           }
         ]
       },
       advanced: {
         title: "Avanzate",
-        intro: "Area tecnica con impostazioni raw e strumenti di debug.",
+        intro: "Area tecnica: usala solo per casi non coperti dal flusso wizard.",
         sections: [
           {
-            heading: "Avvertenza",
+            heading: "Quando usarla",
             steps: [
-              "Usa questa sezione solo se il wizard non copre il caso richiesto.",
-              "Annota ogni modifica tecnica fatta manualmente.",
-              "Dopo le modifiche esegui sempre un test run completo."
+              "Solo troubleshooting o configurazioni speciali.",
+              "Evita modifiche manuali se il wizard copre il caso.",
+              "Dopo ogni modifica, esegui almeno un run di test."
+            ]
+          },
+          {
+            heading: "Best practice",
+            steps: [
+              "Documenta sempre cosa hai cambiato e perche.",
+              "Cambia una cosa alla volta.",
+              "Verifica prima Monitoring, poi Riepiloghi."
             ]
           }
         ]
       },
       views: {
-        title: "Views",
-        intro: "Definisci la query sorgente (SQL Server o HANA) che alimenta le pipeline managed.",
+        title: "Views / Query Builder",
+        intro: "Qui definisci la query sorgente SAP che alimenta le pipeline managed.",
         sections: [
           {
-            heading: "Procedura consigliata",
+            heading: "Significato zone pagina",
             steps: [
-              "Usa il Query Builder per impostare FROM, JOIN e filtri base.",
-              "Rifinisci manualmente l'SQL solo se serve.",
-              "Salva la view e poi usa Publish per creare/aggiornare la view sul DB sorgente."
+              "Zona sinistra (Catalogo): ricerca tabelle/view e lista colonne disponibili.",
+              "Zona destra (Canvas): blocchi FROM, JOIN, FILTRI e CAMPI selezionati.",
+              "Editor SQL: query finale che verra salvata/pubblicata."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (creazione view passo-passo)",
+            steps: [
+              "1) In alto compila Schema nome view e Nome view.",
+              "2) Nel catalogo cerca la tabella e clicca 'Imposta FROM'.",
+              "3) (Opzionale) seleziona altra tabella, clicca 'Prepara JOIN', imposta ON e clicca 'Aggiungi JOIN'.",
+              "4) Seleziona le colonne e clicca 'Aggiungi campi selezionati'.",
+              "5) Aggiungi filtri WHERE dal blocco filtri.",
+              "6) Clicca 'Rigenera SQL dal builder'.",
+              "7) Clicca 'Salva view', poi 'Publish' per creare/aggiornare la view sul DB SAP."
+            ]
+          },
+          {
+            heading: "Significato voci principali",
+            steps: [
+              "ROW LIMIT: limita le righe in output (utile in test).",
+              "JOIN TYPE: INNER/LEFT/RIGHT/FULL in base alla logica dati.",
+              "WRITE MODE non e in questa pagina: si imposta in Pipeline."
             ]
           }
         ]
       },
       pipelines: {
         title: "Pipelines",
-        intro: "Collega una view sorgente a una tabella BigQuery target.",
+        intro: "Collega una view sorgente a una tabella BigQuery e definisci la modalita di scrittura.",
         sections: [
           {
-            heading: "Managed mode",
+            heading: "Significato campi",
             steps: [
-              "Lascia vuoto il campo Command.",
-              "Seleziona la view sorgente.",
-              "Imposta dataset/tabella BigQuery e write mode.",
-              "Esegui Run e controlla il log di esito."
+              "Tenant code: separazione logica ambienti/clienti (di solito 'default').",
+              "Nome pipeline: identificativo funzionale del flusso.",
+              "View sorgente: view SQL da leggere.",
+              "BigQuery dataset / table: destinazione dati.",
+              "Write mode: WRITE_TRUNCATE (sostituisce), WRITE_APPEND (accoda), WRITE_EMPTY (solo se vuota).",
+              "Command: opzionale; lascia vuoto per modalita managed."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (nuova pipeline)",
+            steps: [
+              "1) Compila i campi obbligatori.",
+              "2) Lascia Command vuoto in managed mode.",
+              "3) Clicca 'Crea pipeline'.",
+              "4) Apri il dettaglio pipeline e lancia 'Run'.",
+              "5) Verifica esito in log e in BigQuery."
             ]
           }
         ]
       },
       schedules: {
         title: "Schedules",
-        intro: "Automatizza i run pipeline con cron + timezone.",
+        intro: "Automatizza l'esecuzione delle pipeline tramite cron.",
         sections: [
           {
-            heading: "Cron pratico",
+            heading: "Significato campi",
             steps: [
-              "Usa il Cron Builder per generare l'espressione senza scriverla a mano.",
-              "Formato: minuto ora giorno mese giorno-settimana.",
-              "Esempio ogni 30 minuti: */30 * * * *.",
-              "Usa timezone coerente con il contesto cliente (es. Europe/Rome)."
+              "Pipeline: quale pipeline avviare.",
+              "Cron (5 campi): minuto ora giorno-mese mese giorno-settimana.",
+              "Timezone: fuso orario usato per interpretare il cron.",
+              "Attiva: abilita/disabilita la schedule."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (creazione guidata)",
+            steps: [
+              "1) Scegli la pipeline.",
+              "2) Usa il Cron Builder (Modalita + valori) e clicca 'Genera cron'.",
+              "3) Verifica la stringa nel campo Cron.",
+              "4) Seleziona timezone corretta (es. Europe/Rome).",
+              "5) Clicca 'Crea schedule'."
+            ]
+          },
+          {
+            heading: "Esempi cron utili",
+            steps: [
+              "Ogni ora: 0 * * * *",
+              "Ogni 30 minuti: */30 * * * *",
+              "Lun-Ven alle 07:00: 0 7 * * 1-5"
             ]
           }
         ]
       },
       acl: {
         title: "ACL",
-        intro: "Gestisci accessi per utente Looker Studio in base al codice cliente.",
+        intro: "Controlla la visibilita dei dati in Data Studio per utente/email.",
         sections: [
           {
-            heading: "Regole (legacy + generiche)",
+            heading: "Significato sezioni pagina",
             steps: [
-              "Per il caso storico usa ACL legacy su customer_code.",
-              "Per nuovi clienti usa ACL generica: seleziona vista, campo, operatore e valore.",
-              "Sincronizza ACL su BigQuery dopo modifiche (automatico o pulsante manuale)."
+              "ACL generica: regole flessibili per vista/campo/operatore/valore.",
+              "ACL legacy: regole storiche user_email -> customer_code.",
+              "Query Data Studio generata: SQL pronto da incollare in Data Studio."
+            ]
+          },
+          {
+            heading: "Cosa cliccare (ACL generica)",
+            steps: [
+              "1) Seleziona tenant e vista ACL.",
+              "2) Inserisci user email.",
+              "3) Seleziona campo, operatore e valore.",
+              "4) Clicca 'Crea regola ACL generica'.",
+              "5) Clicca 'Sincronizza ACL su BigQuery' se necessario."
+            ]
+          },
+          {
+            heading: "Significato operatori",
+            steps: [
+              "EQ/NE: uguale/diverso.",
+              "CONTAINS/STARTS_WITH/ENDS_WITH: filtri testuali.",
+              "IN: lista valori separati da virgola.",
+              "GT/GTE/LT/LTE: confronti numerici."
             ]
           }
         ]
       },
       users: {
         title: "Users",
-        intro: "Gestione utenti applicazione e ruoli operativi.",
+        intro: "Gestione utenti applicazione e ruoli di accesso.",
         sections: [
           {
-            heading: "Ruoli",
+            heading: "Significato ruoli",
             steps: [
-              "Admin: pieno controllo.",
-              "Operator: operativo ma senza gestione Users/Settings.",
-              "Viewer: sola lettura."
+              "Admin: puo configurare tutto, incluso utenti e ACL.",
+              "Operator: puo operare su wizard/configurazioni senza funzioni sensibili.",
+              "Viewer: sola consultazione."
+            ]
+          },
+          {
+            heading: "Cosa cliccare",
+            steps: [
+              "1) Compila username, password, ruolo.",
+              "2) Clicca crea/salva utente.",
+              "3) Verifica accesso con logout/login."
             ]
           }
         ]
       },
       settings: {
         title: "Settings Wizard",
-        intro: "Configurazione guidata in step, dalla connessione sorgente fino al setup BigQuery.",
+        intro: "Sezione tecnica guidata per connessioni sorgente e BigQuery.",
         sections: [
           {
-            heading: "Step 1 - Database sorgente",
+            heading: "Step DB sorgente (SQL Server / HANA)",
             steps: [
-              "Apri wizard DB e scegli SQL Server o SAP HANA.",
-              "Compila host/istanza/porta, database, utente e password.",
-              "Applica la stringa e lancia il Test connessione."
+              "Clicca 'Modifica' nella card DB.",
+              "Scegli engine e compila host/istanza/porta/database/utente/password.",
+              "Salva e poi esegui test connessione.",
+              "Se il test fallisce, correggi server/credenziali e riprova."
             ]
           },
           {
-            heading: "Step 2 - Attiva BigQuery (Google Cloud Console)",
+            heading: "Step BigQuery (setup completo)",
             steps: [
-              "Vai su console.cloud.google.com e seleziona il progetto cliente.",
-              "Menu in alto a sinistra -> Billing -> collega un account di fatturazione.",
-              "Menu -> APIs & Services -> Library -> cerca BigQuery API -> Enable.",
-              "Menu -> IAM & Admin -> Service Accounts -> Create Service Account.",
-              "Assegna ruoli: BigQuery Job User + BigQuery Data Editor.",
-              "Apri il service account -> Keys -> Add Key -> Create new key -> JSON.",
-              "Salva il file JSON sul server app, es. C:\\BigQuery\\chiave_cliente.json."
+              "Compila Project ID, Dataset, Location e path JSON service account.",
+              "Clicca setup automatico per salvataggio + test + bootstrap dataset.",
+              "Verifica messaggio di successo e dataset pronto."
             ]
           },
           {
-            heading: "Step 3 - Setup automatico BigQuery in app",
+            heading: "Prerequisiti Google Cloud",
             steps: [
-              "Compila Project ID, Dataset, Location e path JSON.",
-              "Clicca Esegui setup automatico BigQuery.",
-              "Il wizard salva config, testa connessione e crea/valida il dataset."
-            ]
-          },
-          {
-            heading: "Step 4 - Verifica finale",
-            steps: [
-              "Crea una pipeline managed e lancia Run.",
-              "Controlla che il log segnali righe caricate in BigQuery.",
-              "Verifica in BigQuery che la tabella target sia aggiornata."
+              "Billing attivo sul progetto.",
+              "BigQuery API abilitata.",
+              "Service account con BigQuery Job User + BigQuery Data Editor.",
+              "Chiave JSON presente sul server dell'app."
             ]
           }
         ]
       },
       fallback: {
         title: "Guida",
-        intro: "Indicazioni operative base per la pagina corrente.",
+        intro: "Indicazioni operative per la pagina corrente.",
         sections: [
           {
             heading: "Uso rapido",
             steps: [
-              "Compila i campi con i tooltip di supporto.",
-              "Salva e poi testa la configurazione.",
-              "In caso errore, controlla i log uvicorn sul server."
+              "1) Compila i campi obbligatori e salva.",
+              "2) Esegui il test collegato alla funzione.",
+              "3) Verifica l'esito in Monitoring e in Riepiloghi."
             ]
           }
         ]

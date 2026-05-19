@@ -125,6 +125,146 @@ def _run_sqlite_legacy_migrations() -> None:
                 "CREATE INDEX IF NOT EXISTS ix_wizard_sessions_status ON wizard_sessions (status)"
             )
 
+        license_rows = conn.exec_driver_sql("PRAGMA table_info(license_states)").fetchall()
+        if license_rows:
+            license_cols = {row[1] for row in license_rows}
+
+            if "product_code" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN product_code VARCHAR(100) NOT NULL DEFAULT ''"
+                )
+            if "installation_id" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN installation_id VARCHAR(100) NOT NULL DEFAULT ''"
+                )
+            if "machine_fingerprint_hash" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN machine_fingerprint_hash VARCHAR(128) NOT NULL DEFAULT ''"
+                )
+            if "license_key_hash" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN license_key_hash VARCHAR(128)")
+            if "license_mode" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN license_mode VARCHAR(40) NOT NULL DEFAULT 'open_trial'"
+                )
+            if "status" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN status VARCHAR(40) NOT NULL DEFAULT 'open_trial'"
+                )
+            if "plan" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN plan VARCHAR(100)")
+            if "customer_name" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN customer_name VARCHAR(200)")
+            if "customer_email" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN customer_email VARCHAR(320)")
+            if "valid_until" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN valid_until DATETIME")
+            if "grace_until" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN grace_until DATETIME")
+            if "last_check_at" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN last_check_at DATETIME")
+            if "next_check_at" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN next_check_at DATETIME")
+            if "portal_url" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN portal_url VARCHAR(500)")
+            if "features_json" not in license_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_states ADD COLUMN features_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            if "message" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN message TEXT")
+            if "created_at" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN created_at DATETIME")
+            if "updated_at" not in license_cols:
+                conn.exec_driver_sql("ALTER TABLE license_states ADD COLUMN updated_at DATETIME")
+
+            conn.exec_driver_sql(
+                "UPDATE license_states SET product_code = '' WHERE product_code IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET installation_id = '' WHERE installation_id IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET machine_fingerprint_hash = '' WHERE machine_fingerprint_hash IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET license_mode = 'open_trial' "
+                "WHERE license_mode IS NULL OR TRIM(license_mode) = ''"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET status = 'open_trial' "
+                "WHERE status IS NULL OR TRIM(status) = ''"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET features_json = '{}' "
+                "WHERE features_json IS NULL OR TRIM(features_json) = ''"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_states SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"
+            )
+            conn.exec_driver_sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_license_state_product_code "
+                "ON license_states (product_code)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_license_states_status ON license_states (status)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_license_states_mode ON license_states (license_mode)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_license_states_installation_id ON license_states (installation_id)"
+            )
+
+        license_log_rows = conn.exec_driver_sql("PRAGMA table_info(license_check_logs)").fetchall()
+        if license_log_rows:
+            license_log_cols = {row[1] for row in license_log_rows}
+
+            if "checked_at" not in license_log_cols:
+                conn.exec_driver_sql("ALTER TABLE license_check_logs ADD COLUMN checked_at DATETIME")
+            if "status" not in license_log_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_check_logs ADD COLUMN status VARCHAR(40) NOT NULL DEFAULT 'open_trial'"
+                )
+            if "mode" not in license_log_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_check_logs ADD COLUMN mode VARCHAR(40) NOT NULL DEFAULT 'open_trial'"
+                )
+            if "success" not in license_log_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE license_check_logs ADD COLUMN success BOOLEAN NOT NULL DEFAULT 1"
+                )
+            if "message" not in license_log_cols:
+                conn.exec_driver_sql("ALTER TABLE license_check_logs ADD COLUMN message TEXT")
+            if "response_json" not in license_log_cols:
+                conn.exec_driver_sql("ALTER TABLE license_check_logs ADD COLUMN response_json TEXT")
+
+            conn.exec_driver_sql(
+                "UPDATE license_check_logs SET checked_at = CURRENT_TIMESTAMP WHERE checked_at IS NULL"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_check_logs SET status = 'open_trial' "
+                "WHERE status IS NULL OR TRIM(status) = ''"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_check_logs SET mode = 'open_trial' "
+                "WHERE mode IS NULL OR TRIM(mode) = ''"
+            )
+            conn.exec_driver_sql(
+                "UPDATE license_check_logs SET success = 1 WHERE success IS NULL"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_license_check_logs_checked_at "
+                "ON license_check_logs (checked_at)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_license_check_logs_status "
+                "ON license_check_logs (status)"
+            )
+
 
 def init_db() -> None:
     from . import models  # noqa: F401

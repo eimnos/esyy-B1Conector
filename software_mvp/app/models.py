@@ -167,3 +167,42 @@ class WizardSession(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class LicenseState(Base):
+    __tablename__ = "license_states"
+    __table_args__ = (
+        UniqueConstraint("product_code", name="uq_license_state_product_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_code: Mapped[str] = mapped_column(String(100), index=True)
+    installation_id: Mapped[str] = mapped_column(String(100), index=True)
+    machine_fingerprint_hash: Mapped[str] = mapped_column(String(128))
+    license_key_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    license_mode: Mapped[str] = mapped_column(String(40), default="open_trial", index=True)
+    status: Mapped[str] = mapped_column(String(40), default="open_trial", index=True)
+    plan: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    customer_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    grace_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_check_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    portal_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    features_json: Mapped[str] = mapped_column(Text, default="{}")
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class LicenseCheckLog(Base):
+    __tablename__ = "license_check_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="open_trial", index=True)
+    mode: Mapped[str] = mapped_column(String(40), default="open_trial")
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_json: Mapped[str | None] = mapped_column(Text, nullable=True)
