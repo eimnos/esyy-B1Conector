@@ -1,48 +1,44 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="section">
-  <h2>Riepilogo configurazioni</h2>
-  <p class="muted">Stato reale dei wizard salvato su database.</p>
+  <h2>Riepiloghi configurazione</h2>
+  <p class="muted">Snapshot leggibile dello stato wizard, utile per collaudo e passaggio consegne.</p>
 </div>
 
-<div class="section">
-  <table>
-    <thead>
-      <tr>
-        <th>Wizard</th>
-        <th>Stato</th>
-        <th>Completamento</th>
-        <th>Ultimo aggiornamento</th>
-        <th>Azione</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for w in cards %}
-      <tr>
-        <td>
-          <strong>{{ w.title }}</strong>
-          <div class="muted">{{ w.description }}</div>
-        </td>
-        <td>
-          <span class="wizard-chip chip-{{ w.status_class }}">{{ w.status_label }}</span>
-        </td>
-        <td>
-          <div class="wizard-progress" style="max-width:200px;">
-            <span style="width: {{ w.progress }}%"></span>
-          </div>
-          <div class="muted">{{ w.progress }}%</div>
-        </td>
-        <td>{{ w.last_updated }}</td>
-        <td>
-          <a href="{{ w.route }}" class="btn secondary btn-xs">Modifica con wizard</a>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="5" class="muted">Nessun wizard disponibile.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="wizard-grid">
+  {% for w in cards %}
+  <article class="wizard-card">
+    <div class="wizard-card-head">
+      <div class="wizard-order">{{ w.order }}</div>
+      <span class="wizard-chip chip-{{ w.status_class }}">{{ w.status_label }}</span>
+    </div>
+
+    <div class="wizard-title-row">
+      <div class="wizard-icon">{{ w.icon_label }}</div>
+      <div>
+        <h3 class="wizard-title">{{ w.title }}</h3>
+        <p class="wizard-description">{{ w.description }}</p>
+      </div>
+    </div>
+
+    <p class="wizard-summary">{{ w.summary }}</p>
+
+    <div class="wizard-progress-row">
+      <div class="wizard-progress">
+        <span style="width: {{ w.progress }}%"></span>
+      </div>
+      <span class="wizard-progress-value">{{ w.progress }}%</span>
+    </div>
+    <div class="wizard-updated muted">Ultima modifica: {{ w.last_updated }}</div>
+
+    <div class="wizard-actions">
+      <a href="{{ w.route }}" class="btn primary btn-xs">{{ w.action_label }}</a>
+    </div>
+  </article>
+  {% else %}
+  <article class="wizard-card">
+    <p class="muted">Nessun wizard disponibile.</p>
+  </article>
+  {% endfor %}
 </div>
 {% endblock %}

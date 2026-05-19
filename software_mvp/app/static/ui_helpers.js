@@ -123,6 +123,20 @@
 
     const activeNav = String(document.body.getAttribute("data-active-nav") || "").trim().toLowerCase();
     const guides = {
+      overview: {
+        title: "Dashboard",
+        intro: "Controllo rapido stato configurazione, run e integrita generale.",
+        sections: [
+          {
+            heading: "Check iniziale",
+            steps: [
+              "Verifica eventuali messaggi rossi in alto.",
+              "Controlla i contatori Views/Pipelines/Schedules.",
+              "Apri gli ultimi run e cerca eventuali status KO."
+            ]
+          }
+        ]
+      },
       dashboard: {
         title: "Dashboard",
         intro: "Controllo rapido stato configurazione, run e integrita generale.",
@@ -133,6 +147,76 @@
               "Verifica eventuali messaggi rossi in alto.",
               "Controlla i contatori Views/Pipelines/Schedules.",
               "Apri gli ultimi run e cerca eventuali status KO."
+            ]
+          }
+        ]
+      },
+      configurations: {
+        title: "Configurazioni guidate",
+        intro: "Questa pagina e il punto di ingresso principale ai wizard.",
+        sections: [
+          {
+            heading: "Flusso consigliato",
+            steps: [
+              "Parti da Connessione SAP B1 e completa in ordine le card.",
+              "Usa Apri wizard per configurare o correggere una sezione.",
+              "Evita modifiche tecniche dirette se non strettamente necessarie."
+            ]
+          }
+        ]
+      },
+      summaries: {
+        title: "Riepiloghi",
+        intro: "Vista sintetica dello stato configurazioni da condividere con il cliente.",
+        sections: [
+          {
+            heading: "Uso operativo",
+            steps: [
+              "Controlla badge stato e percentuale di ogni wizard.",
+              "Apri Modifica con wizard per intervenire su una configurazione.",
+              "Usa questa pagina come check finale di collaudo."
+            ]
+          }
+        ]
+      },
+      monitoring: {
+        title: "Monitoraggio",
+        intro: "Stato sistema, alert e storico run pipeline.",
+        sections: [
+          {
+            heading: "Cosa controllare",
+            steps: [
+              "Verifica i controlli SAP/BigQuery/Scheduler/Looker.",
+              "Dai priorita agli alert con CTA Risolvi con wizard.",
+              "Controlla i run con status KO e correggi dalla configurazione guidata."
+            ]
+          }
+        ]
+      },
+      users_access: {
+        title: "Utenti e accessi",
+        intro: "Gestione utenti app e filtri di visibilita dati.",
+        sections: [
+          {
+            heading: "Pratica consigliata",
+            steps: [
+              "Configura i filtri da Wizard Accessi dati.",
+              "Usa ACL raw solo per casi speciali o troubleshooting.",
+              "Mantieni ruoli utente coerenti (Admin/Operator/Viewer)."
+            ]
+          }
+        ]
+      },
+      advanced: {
+        title: "Avanzate",
+        intro: "Area tecnica con impostazioni raw e strumenti di debug.",
+        sections: [
+          {
+            heading: "Avvertenza",
+            steps: [
+              "Usa questa sezione solo se il wizard non copre il caso richiesto.",
+              "Annota ogni modifica tecnica fatta manualmente.",
+              "Dopo le modifiche esegui sempre un test run completo."
             ]
           }
         ]

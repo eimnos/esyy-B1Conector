@@ -252,7 +252,10 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "title": "Test connessione",
                 "type": "test",
                 "question": "Esegui il test e registra l'esito.",
-                "description": "Dalla pagina tecnica potrai lanciare il test reale.",
+                "description": (
+                    "Dalla pagina tecnica puoi lanciare il test reale. "
+                    "Per SQL Server il test viene comunque rieseguito automaticamente alla conferma finale."
+                ),
                 "fields": [
                     {
                         "id": "result",
@@ -377,14 +380,63 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "description": "Collegherai una view sorgente a una tabella BigQuery.",
             },
             {
+                "id": "pipeline_identity",
+                "title": "Identita pipeline",
+                "type": "two_inputs",
+                "question": "Come vuoi chiamare questa pipeline?",
+                "description": "Usa un nome operativo chiaro per riconoscerla nei run.",
+                "fields": [
+                    {"id": "tenant_code", "label": "Tenant code", "placeholder": "default", "required": True},
+                    {
+                        "id": "name",
+                        "label": "Nome pipeline",
+                        "placeholder": "export_ordini_clienti",
+                        "required": True,
+                    },
+                ],
+            },
+            {
+                "id": "source_view",
+                "title": "View sorgente",
+                "type": "input",
+                "question": "Quale view SAP vuoi esportare?",
+                "description": "Seleziona una view gia creata nella sezione Dati da esportare.",
+                "fields": [
+                    {
+                        "id": "source_view_id",
+                        "label": "View sorgente",
+                        "input_type": "select",
+                        "required": True,
+                        "options": [],
+                    }
+                ],
+            },
+            {
+                "id": "pipeline_target",
+                "title": "Target BigQuery",
+                "type": "two_inputs",
+                "question": "Dove vuoi caricare i dati su BigQuery?",
+                "description": "Dataset e tabella di destinazione della pipeline.",
+                "fields": [
+                    {"id": "bq_dataset", "label": "BigQuery dataset", "placeholder": "sap_reporting", "required": True},
+                    {
+                        "id": "bq_table",
+                        "label": "BigQuery table",
+                        "placeholder": "stato_ordini_cliente",
+                        "required": True,
+                    },
+                ],
+            },
+            {
                 "id": "write_mode",
                 "title": "Modalita di scrittura",
                 "type": "choice",
                 "question": "Quale write mode vuoi usare?",
-                "description": "WRITE_TRUNCATE sostituisce i dati a ogni esecuzione.",
+                "description": "WRITE_TRUNCATE sostituisce i dati, WRITE_APPEND li accoda.",
                 "options": [
                     {"value": "WRITE_TRUNCATE", "label": "WRITE_TRUNCATE"},
                     {"value": "WRITE_APPEND", "label": "WRITE_APPEND"},
+                    {"value": "WRITE_EMPTY", "label": "WRITE_EMPTY"},
                 ],
             },
             {
@@ -392,7 +444,7 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "title": "Conferma",
                 "type": "review",
                 "question": "Confermi i parametri pipeline?",
-                "description": "Applica la configurazione dalla pagina Pipelines.",
+                "description": "Alla conferma finale la pipeline viene creata o aggiornata automaticamente.",
             },
         ],
     },

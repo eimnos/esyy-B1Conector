@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Monitoraggio</h2>
+  <p class="muted">Controllo stato integrazioni, run e alert operativi.</p>
+</div>
+
+<div class="overview-metrics-grid">
+  <article class="card">
+    <div class="label">Run analizzati</div>
+    <div class="value">{{ recent_runs|length }}</div>
+    <div class="muted">Ultime esecuzioni disponibili.</div>
+  </article>
+  <article class="card">
+    <div class="label">Run con errore</div>
+    <div class="value">{{ run_failures }}</div>
+    <div class="muted">Status diversi da OK/Success.</div>
+  </article>
+  <article class="card">
+    <div class="label">Alert aperti</div>
+    <div class="value">{{ alerts|length }}</div>
+    <div class="muted">Azioni consigliate disponibili sotto.</div>
+  </article>
+  <article class="card">
+    <div class="label">Stato componenti</div>
+    <div class="value">{{ system_ok_count }}/{{ system_checks|length }}</div>
+    <div class="muted">Componenti in salute.</div>
+  </article>
+</div>
+
+<div class="section">
+  <h3>Stato sistema</h3>
+  <div class="status-check-grid">
+    {% for check in system_checks %}
+    <article class="status-check-card">
+      <div>
+        <strong>{{ check.label }}</strong>
+      </div>
+      <span class="wizard-chip chip-{{ check.status_class }}">{{ check.status_label }}</span>
+    </article>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h3>Alert e azioni</h3>
+  {% if alerts %}
+  <div class="status-check-grid">
+    {% for a in alerts %}
+    <article class="status-check-card">
+      <div>
+        <strong>{{ a.title }}</strong>
+        <div class="muted">{{ a.detail }}</div>
+      </div>
+      <div class="status-check-actions">
+        <a href="{{ a.route }}" class="btn primary btn-xs">{{ a.action }}</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Nessun alert aperto. Il sistema risulta allineato.</p>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h3>Distribuzione status run</h3>
+  <div class="run-chip-row">
+    {% for key, value in run_status_totals.items() %}
+      {% set chip_class = "chip-neutral" %}
+      {% if key in ["ok", "success", "completed", "done"] %}
+        {% set chip_class = "chip-success" %}
+      {% elif key in ["error", "ko", "failed"] %}
+        {% set chip_class = "chip-danger" %}
+      {% else %}
+        {% set chip_class = "chip-warning" %}
+      {% endif %}
+      <span class="wizard-chip {{ chip_class }}">{{ key }}: {{ value }}</span>
+    {% else %}
+      <span class="wizard-chip chip-neutral">Nessun dato run</span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h3>Storico run</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Pipeline</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Ended</th>
+        <th>Messaggio</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recent_runs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          {% if pipeline_by_id.get(r.pipeline_id) %}
+            <a href="/ui/pipelines/{{ r.pipeline_id }}">{{ pipeline_by_id.get(r.pipeline_id).name }}</a>
+          {% else %}
+            #{{ r.pipeline_id }}
+          {% endif %}
+        </td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.started_at }}</td>
+        <td>{{ r.ended_at }}</td>
+        <td><pre style="margin:0;white-space:pre-wrap">{{ r.message or '' }}</pre></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Nessun run disponibile.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

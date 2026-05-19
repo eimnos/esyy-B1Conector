@@ -2,38 +2,65 @@
 {% block body %}
 <div class="section">
   <h2>Avanzate</h2>
-  <p class="muted">Queste impostazioni sono pensate per utenti tecnici.</p>
+  <p class="muted">
+    Queste impostazioni sono pensate per utenti tecnici.
+    Modifiche errate possono compromettere il funzionamento del connettore.
+  </p>
 </div>
 
 <div class="section">
-  <h3>Strumenti tecnici disponibili</h3>
-  <div class="grid">
-    <div class="card">
-      <div class="label">Views</div>
-      <div><a class="btn secondary btn-xs" href="/ui/views">Apri view tecniche</a></div>
-    </div>
-    <div class="card">
-      <div class="label">Pipelines</div>
-      <div><a class="btn secondary btn-xs" href="/ui/pipelines">Apri pipeline tecniche</a></div>
-    </div>
-    <div class="card">
-      <div class="label">Schedules</div>
-      <div><a class="btn secondary btn-xs" href="/ui/schedules">Apri schedule cron</a></div>
-    </div>
-    <div class="card">
-      <div class="label">ACL</div>
-      <div><a class="btn secondary btn-xs" href="/ui/acl">Apri ACL raw</a></div>
-    </div>
-    {% if is_admin %}
-    <div class="card">
-      <div class="label">Settings</div>
-      <div><a class="btn secondary btn-xs" href="/ui/settings">Apri settings raw</a></div>
-    </div>
-    <div class="card">
-      <div class="label">Users</div>
-      <div><a class="btn secondary btn-xs" href="/ui/users">Apri utenti</a></div>
-    </div>
-    {% endif %}
+  <h3>Configurazioni raw</h3>
+  <div class="status-check-grid">
+    <article class="status-check-card">
+      <div>
+        <strong>Views tecniche</strong>
+        <div class="muted">Definizione SQL, publish su DB sorgente, troubleshooting query.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/views">Apri Views</a>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>Pipelines tecniche</strong>
+        <div class="muted">Mapping view-target BigQuery, command custom, run manuale.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/pipelines">Apri Pipelines</a>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>Schedules raw</strong>
+        <div class="muted">Cron manuale, timezone, attivazioni/disattivazioni.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/schedules">Apri Schedules</a>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>ACL raw</strong>
+        <div class="muted">Regole legacy e filtri avanzati per query Looker.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/acl">Apri ACL</a>
+    </article>
   </div>
 </div>
+
+{% if is_admin %}
+<div class="section">
+  <h3>Amministrazione</h3>
+  <div class="status-check-grid">
+    <article class="status-check-card">
+      <div>
+        <strong>Settings raw</strong>
+        <div class="muted">Connection string, path credenziali, setup tecnico completo.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/settings">Apri Settings</a>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>Utenti applicazione</strong>
+        <div class="muted">Gestione account, ruoli, attivazione/disattivazione.</div>
+      </div>
+      <a class="btn secondary btn-xs" href="/ui/users">Apri Users</a>
+    </article>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

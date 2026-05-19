@@ -210,13 +210,24 @@
             {% if field %}
               <div>
                 <label>{{ field.label }}</label>
-                <input
-                  type="{{ field.input_type if field.input_type else 'text' }}"
-                  name="field__{{ field.id }}"
-                  value="{{ current_payload.get(field.id, '') }}"
-                  placeholder="{{ field.placeholder if field.placeholder else '' }}"
-                  {% if field.required %}required{% endif %}
-                >
+                {% if field.input_type == "select" %}
+                  <select
+                    name="field__{{ field.id }}"
+                    {% if field.required %}required{% endif %}
+                  >
+                    {% for opt in field.options if field.options else [] %}
+                      <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                    {% endfor %}
+                  </select>
+                {% else %}
+                  <input
+                    type="{{ field.input_type if field.input_type else 'text' }}"
+                    name="field__{{ field.id }}"
+                    value="{{ current_payload.get(field.id, field.default if field.default else '') }}"
+                    placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                    {% if field.required %}required{% endif %}
+                  >
+                {% endif %}
               </div>
             {% endif %}
 
@@ -225,13 +236,24 @@
               {% for field in current_step.fields %}
                 <div>
                   <label>{{ field.label }}</label>
-                  <input
-                    type="{{ field.input_type if field.input_type else 'text' }}"
-                    name="field__{{ field.id }}"
-                    value="{{ current_payload.get(field.id, '') }}"
-                    placeholder="{{ field.placeholder if field.placeholder else '' }}"
-                    {% if field.required %}required{% endif %}
-                  >
+                  {% if field.input_type == "select" %}
+                    <select
+                      name="field__{{ field.id }}"
+                      {% if field.required %}required{% endif %}
+                    >
+                      {% for opt in field.options if field.options else [] %}
+                        <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    <input
+                      type="{{ field.input_type if field.input_type else 'text' }}"
+                      name="field__{{ field.id }}"
+                      value="{{ current_payload.get(field.id, field.default if field.default else '') }}"
+                      placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                      {% if field.required %}required{% endif %}
+                    >
+                  {% endif %}
                 </div>
               {% endfor %}
             </div>
@@ -241,13 +263,24 @@
               {% for field in current_step.fields %}
                 <div>
                   <label>{{ field.label }}</label>
-                  <input
-                    type="{{ field.input_type if field.input_type else 'text' }}"
-                    name="field__{{ field.id }}"
-                    value="{{ current_payload.get(field.id, '') }}"
-                    placeholder="{{ field.placeholder if field.placeholder else '' }}"
-                    {% if field.required %}required{% endif %}
-                  >
+                  {% if field.input_type == "select" %}
+                    <select
+                      name="field__{{ field.id }}"
+                      {% if field.required %}required{% endif %}
+                    >
+                      {% for opt in field.options if field.options else [] %}
+                        <option value="{{ opt.value }}" {% if current_payload.get(field.id, field.default if field.default else '') == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                      {% endfor %}
+                    </select>
+                  {% else %}
+                    <input
+                      type="{{ field.input_type if field.input_type else 'text' }}"
+                      name="field__{{ field.id }}"
+                      value="{{ current_payload.get(field.id, field.default if field.default else '') }}"
+                      placeholder="{{ field.placeholder if field.placeholder else '' }}"
+                      {% if field.required %}required{% endif %}
+                    >
+                  {% endif %}
                 </div>
               {% endfor %}
             </div>
@@ -305,9 +338,13 @@
             <span></span>
             {% endif %}
             <button class="btn secondary" type="submit" name="action" value="save" formnovalidate>Salva bozza</button>
+            {% if not has_next and wizard_session.status == "completed" %}
+            <a href="/ui/configurations" class="btn primary">Torna alle configurazioni</a>
+            {% else %}
             <button class="btn primary" type="submit" name="action" value="continue">
               {% if has_next %}Conferma e continua{% else %}Conferma finale{% endif %}
             </button>
+            {% endif %}
           </div>
         </form>
       </div>

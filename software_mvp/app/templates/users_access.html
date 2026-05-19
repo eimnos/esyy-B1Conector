@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Utenti e accessi</h2>
+  <p class="muted">Gestione accesso applicazione e visibilita dati cliente.</p>
+</div>
+
+<div class="overview-metrics-grid">
+  <article class="card">
+    <div class="label">Utenti applicazione</div>
+    <div class="value">{{ users_total }}</div>
+    <div class="muted">Attivi: {{ users_active }}</div>
+  </article>
+  <article class="card">
+    <div class="label">Ruoli</div>
+    <div class="value value-sm">A {{ users_admin }} - O {{ users_operator }} - V {{ users_viewer }}</div>
+    <div class="muted">Admin / Operator / Viewer</div>
+  </article>
+  <article class="card">
+    <div class="label">Regole ACL classiche</div>
+    <div class="value">{{ acl_legacy_active }}/{{ acl_legacy_total }}</div>
+    <div class="muted">Attive su totale regole legacy</div>
+  </article>
+  <article class="card">
+    <div class="label">Regole ACL filtro</div>
+    <div class="value">{{ acl_filter_active }}/{{ acl_filter_total }}</div>
+    <div class="muted">Attive su totale regole filtro</div>
+  </article>
+</div>
+
+<div class="section">
+  <h3>Percorso consigliato</h3>
+  <div class="status-check-grid">
+    <article class="status-check-card">
+      <div>
+        <strong>Wizard accessi dati</strong>
+        <div class="muted">Configura filtri per email utente e visibilita dei dati.</div>
+      </div>
+      <div class="status-check-actions">
+        <a href="/ui/wizard/access" class="btn primary btn-xs">Apri wizard</a>
+      </div>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>Dettaglio ACL tecnico</strong>
+        <div class="muted">Regole avanzate e query Looker generate.</div>
+      </div>
+      <div class="status-check-actions">
+        <a href="/ui/acl" class="btn secondary btn-xs">Apri ACL</a>
+      </div>
+    </article>
+    <article class="status-check-card">
+      <div>
+        <strong>Gestione utenti applicazione</strong>
+        <div class="muted">
+          {% if is_admin %}
+            Crea utenti, assegna ruolo, attiva/disattiva account.
+          {% else %}
+            Solo gli admin possono modificare utenti e ruoli applicativi.
+          {% endif %}
+        </div>
+      </div>
+      <div class="status-check-actions">
+        {% if is_admin %}
+          <a href="/ui/users" class="btn secondary btn-xs">Apri utenti</a>
+        {% else %}
+          <span class="wizard-chip chip-neutral">Solo admin</span>
+        {% endif %}
+      </div>
+    </article>
+  </div>
+</div>
+{% endblock %}

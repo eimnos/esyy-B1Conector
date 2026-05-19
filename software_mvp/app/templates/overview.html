@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="section">
+  <h2>Panoramica operativa</h2>
+  <p class="muted">Controllo rapido dello stato connettore e dei passaggi ancora da completare.</p>
+  <div class="wizard-summary-bar">
+    <span><strong>{{ completed_wizards }}/{{ total_wizards }}</strong> wizard completati</span>
+    <span class="wizard-chip chip-success">{{ completion_pct }}% completamento</span>
+    <span class="wizard-chip chip-warning">{{ alerts_open }} attenzioni aperte</span>
+  </div>
+</div>
+
+<div class="overview-metrics-grid">
+  <article class="card">
+    <div class="label">Configurazione</div>
+    <div class="value">{{ completed_wizards }}/{{ total_wizards }}</div>
+    <div class="muted">In corso: {{ in_progress_wizards }} - Da configurare: {{ pending_wizards }}</div>
+  </article>
+  <article class="card">
+    <div class="label">Ultima esecuzione</div>
+    <div class="value value-sm">
+      {% if last_run %}
+        {{ last_run.status or "n/d" }}
+      {% else %}
+        n/d
+      {% endif %}
+    </div>
+    <div class="muted">
+      {% if last_run %}
+        Run #{{ last_run.id }} - {{ last_run.started_at }}
+      {% else %}
+        Nessun run registrato.
+      {% endif %}
+    </div>
+  </article>
+  <article class="card">
+    <div class="label">Salute sistema</div>
+    <div class="value">{{ system_ok_count }}/{{ system_checks|length }}</div>
+    <div class="muted">Componenti operativi</div>
+  </article>
+  <article class="card">
+    <div class="label">Alert recenti</div>
+    <div class="value">{{ alerts_open }}</div>
+    <div class="muted">Review richiesta su wizard o run.</div>
+  </article>
+</div>
+
+<div class="section">
+  <h3>Controlli sistema</h3>
+  <div class="status-check-grid">
+    {% for check in system_checks %}
+    <article class="status-check-card">
+      <div>
+        <strong>{{ check.label }}</strong>
+        <div class="muted">{{ check.value }}</div>
+      </div>
+      <div class="status-check-actions">
+        <span class="wizard-chip chip-{{ check.status_class }}">{{ "OK" if check.ok else "Da verificare" }}</span>
+        <a href="{{ check.route }}" class="btn secondary btn-xs">Apri wizard</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="section">
+  <h3>Prossima azione consigliata</h3>
+  {% if next_wizard %}
+  <div class="status-check-card">
+    <div>
+      <strong>{{ next_wizard.order }} - {{ next_wizard.title }}</strong>
+      <div class="muted">{{ next_wizard.description }}</div>
+      <div class="muted">Stato: {{ next_wizard.status_label }} - Progress: {{ next_wizard.progress }}%</div>
+    </div>
+    <div class="status-check-actions">
+      <a href="{{ next_wizard.route }}" class="btn primary btn-xs">Continua wizard</a>
+      <a href="/ui/summaries" class="btn secondary btn-xs">Vedi riepiloghi</a>
+    </div>
+  </div>
+  {% else %}
+  <p class="muted">Tutti i wizard risultano completati. Puoi passare a Monitoraggio o Riepiloghi.</p>
+  <div class="wizard-actions">
+    <a href="/ui/monitoring" class="btn primary btn-xs">Apri monitoraggio</a>
+    <a href="/ui/summaries" class="btn secondary btn-xs">Apri riepiloghi</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section">
+  <h3>Ultimi run pipeline</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Pipeline</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Ended</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recent_runs %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>
+          {% if pipeline_by_id.get(r.pipeline_id) %}
+            <a href="/ui/pipelines/{{ r.pipeline_id }}">{{ pipeline_by_id.get(r.pipeline_id).name }}</a>
+          {% else %}
+            #{{ r.pipeline_id }}
+          {% endif %}
+        </td>
+        <td>{{ r.status }}</td>
+        <td>{{ r.started_at }}</td>
+        <td>{{ r.ended_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">Nessun run disponibile.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

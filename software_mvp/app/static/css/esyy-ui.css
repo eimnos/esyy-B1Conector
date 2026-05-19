@@ -359,6 +359,48 @@ body {
   gap: 8px;
 }
 
+.overview-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.value-sm {
+  font-size: 20px !important;
+  line-height: 1.2;
+}
+
+.status-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.status-check-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-check-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.run-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .wizard-stub-head {
   display: flex;
   align-items: center;

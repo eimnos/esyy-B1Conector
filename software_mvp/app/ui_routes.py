@@ -96,6 +96,7 @@ ACL_FILTER_OPERATORS = [
     ("LTE", "<="),
 ]
 ACL_FILTER_OPERATOR_KEYS = {key for key, _ in ACL_FILTER_OPERATORS}
+PIPELINE_WRITE_MODES = {"WRITE_TRUNCATE", "WRITE_APPEND", "WRITE_EMPTY"}
 
 
 def _redirect(
@@ -508,6 +509,57 @@ def _wizard_step_payload_map(draft_data: dict[str, object], step_id: str) -> dic
     return payload
 
 
+def _enrich_wizard_runtime_definition(wizard_id: str, wizard_row: dict[str, object], db: Session) -> dict[str, object]:
+    if wizard_id != "sync":
+        return wizard_row
+
+    steps = _wizard_steps(wizard_row)
+    if not steps:
+        return wizard_row
+
+    views = (
+        db.query(ReportView)
+        .order_by(ReportView.schema_name.asc(), ReportView.view_name.asc(), ReportView.id.asc())
+        .all()
+    )
+    view_options = [{"value": "", "label": "-- seleziona view --"}]
+    for row in views:
+        view_options.append(
+            {
+                "value": str(row.id),
+                "label": f"{row.id} - {row.schema_name}.{row.view_name}",
+            }
+        )
+
+    dataset_default = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip() or "sap_reporting"
+
+    for step in steps:
+        if str(step.get("id") or "") == "source_view":
+            fields = step.get("fields")
+            if isinstance(fields, list):
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                    if str(field.get("id") or "") == "source_view_id":
+                        field["input_type"] = "select"
+                        field["options"] = view_options
+            if not views:
+                step["description"] = (
+                    "Nessuna view disponibile. Prima crea una view nella sezione "
+                    "'Dati da esportare' (Query Builder)."
+                )
+        elif str(step.get("id") or "") == "pipeline_target":
+            fields = step.get("fields")
+            if isinstance(fields, list):
+                for field in fields:
+                    if not isinstance(field, dict):
+                        continue
+                    if str(field.get("id") or "") == "bq_dataset":
+                        field["default"] = dataset_default
+
+    return wizard_row
+
+
 def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
     draft_data = read_draft_data(session_row)
     engine_payload = _wizard_step_payload_map(draft_data, "engine")
@@ -525,9 +577,6 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
     password = credentials_payload.get("pwd", "").strip() or credentials_payload.get("password", "").strip()
     test_result = test_payload.get("result", "").strip().lower()
 
-    if test_result != "ok":
-        raise ValueError("Step test non confermato: imposta esito test su OK prima della conferma finale.")
-
     if not server:
         raise ValueError("Server obbligatorio nello step 'Server e database'.")
     if not database:
@@ -538,13 +587,23 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
         raise ValueError("Password obbligatoria nello step 'Credenziali'.")
 
     if db_engine == "sqlserver":
+        # Per SQL Server la conferma finale esegue comunque un test reale di connessione.
+        # Quindi consentiamo anche "pending" o vuoto; blocchiamo solo esiti esplicitamente KO.
+        if test_result in {"ko", "failed", "error"}:
+            raise ValueError(
+                "Lo step test e impostato su KO: correggi i dati o imposta un esito coerente prima della conferma finale."
+            )
+
         current_sql = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default="")
         parsed_sql = _parse_sqlserver_conn_str(current_sql)
+        server_host, server_instance, server_port = _split_sqlserver_server_token(server)
+        if not server_host:
+            raise ValueError("Server SQL Server non valido nello step 'Server e database'.")
         conn_str = _build_sqlserver_conn_str(
             driver=str(parsed_sql.get("driver") or "ODBC Driver 17 for SQL Server"),
-            server=server,
-            instance=str(parsed_sql.get("instance") or ""),
-            port=str(parsed_sql.get("port") or ""),
+            server=server_host,
+            instance=server_instance,
+            port=server_port,
             database=database,
             uid=username,
             pwd=password,
@@ -552,6 +611,13 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
             trust_server_certificate=bool(parsed_sql.get("trust_server_certificate", True)),
         )
         server_name, db_name = test_sqlserver_connection(conn_str)
+        # Il test reale SQL Server e andato a buon fine: sincronizziamo anche lo step wizard.
+        save_step_data(
+            db,
+            session_row,
+            "test",
+            {"result": "ok"},
+        )
         _save_settings(
             db,
             {
@@ -563,6 +629,11 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
             "Wizard SAP completato: impostazioni SQL Server salvate e testate "
             f"(Server={server_name} | Database={db_name})."
         )
+
+    # Per HANA non abbiamo ancora un test runtime equivalente qui nel wizard:
+    # richiediamo quindi una conferma esplicita dello step test.
+    if test_result != "ok":
+        raise ValueError("Step test non confermato: imposta esito test su OK prima della conferma finale.")
 
     current_hana = _load_setting(db, HANA_CONN_STR_SETTING_KEY, default="")
     parsed_hana = _parse_hana_conn_str(current_hana)
@@ -596,6 +667,83 @@ def _apply_sap_wizard_to_settings(db: Session, session_row) -> str:
     )
 
 
+def _apply_sync_wizard_to_pipeline(db: Session, session_row) -> str:
+    draft_data = read_draft_data(session_row)
+    identity_payload = _wizard_step_payload_map(draft_data, "pipeline_identity")
+    source_payload = _wizard_step_payload_map(draft_data, "source_view")
+    target_payload = _wizard_step_payload_map(draft_data, "pipeline_target")
+    mode_payload = _wizard_step_payload_map(draft_data, "write_mode")
+
+    tenant_code = (identity_payload.get("tenant_code") or "").strip() or "default"
+    pipeline_name = (identity_payload.get("name") or "").strip()
+    if not pipeline_name:
+        raise ValueError("Nome pipeline obbligatorio nello step 'Identita pipeline'.")
+
+    source_view_raw = (source_payload.get("source_view_id") or "").strip()
+    if not source_view_raw:
+        raise ValueError("Seleziona una view nello step 'View sorgente'.")
+    try:
+        source_view_id = int(source_view_raw)
+    except ValueError as exc:
+        raise ValueError("View sorgente non valida nello step 'View sorgente'.") from exc
+
+    source_view = db.get(ReportView, source_view_id)
+    if source_view is None:
+        raise ValueError("La view selezionata non esiste piu. Riapri lo step e selezionala di nuovo.")
+
+    bq_dataset = (target_payload.get("bq_dataset") or "").strip()
+    if not bq_dataset:
+        bq_dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip() or "sap_reporting"
+
+    bq_table = (target_payload.get("bq_table") or "").strip()
+    if not bq_table:
+        raise ValueError("Tabella BigQuery obbligatoria nello step 'Target BigQuery'.")
+
+    write_mode = (mode_payload.get("value") or "").strip().upper() or "WRITE_TRUNCATE"
+    if write_mode not in PIPELINE_WRITE_MODES:
+        raise ValueError("Write mode non valido nello step 'Modalita di scrittura'.")
+
+    row = (
+        db.query(Pipeline)
+        .filter(Pipeline.tenant_code == tenant_code)
+        .filter(Pipeline.name == pipeline_name)
+        .first()
+    )
+    created = row is None
+    if row is None:
+        row = Pipeline(
+            tenant_code=tenant_code,
+            name=pipeline_name,
+            source_view_id=source_view_id,
+            bq_dataset=bq_dataset,
+            bq_table=bq_table,
+            write_mode=write_mode,
+            command=None,
+            is_active=True,
+        )
+        db.add(row)
+    else:
+        row.source_view_id = source_view_id
+        row.bq_dataset = bq_dataset
+        row.bq_table = bq_table
+        row.write_mode = write_mode
+        row.is_active = True
+        row.updated_at = datetime.utcnow()
+
+    try:
+        db.commit()
+        db.refresh(row)
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError(f"Errore salvataggio pipeline: {exc}") from exc
+
+    action = "creata" if created else "aggiornata"
+    return (
+        f"Wizard sincronizzazione completato: pipeline {action} "
+        f"(ID {row.id}, view {source_view.schema_name}.{source_view.view_name}, target {row.bq_dataset}.{row.bq_table})."
+    )
+
+
 def _fmt_last_updated(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -609,6 +757,53 @@ def _build_wizard_cards(request: Request, db: Session) -> list[dict[str, str | i
 
     for raw in list_wizard_card_definitions():
         wizard_id = str(raw.get("id") or "").strip()
+
+        if wizard_id == "data":
+            total_views = db.query(func.count(ReportView.id)).scalar() or 0
+            active_views = (
+                db.query(func.count(ReportView.id)).filter(ReportView.is_active.is_(True)).scalar() or 0
+            )
+            last_view_update = db.query(func.max(ReportView.updated_at)).scalar()
+
+            if total_views <= 0:
+                progress = 0
+                status, status_label, status_class = ("not_configured", "Da configurare", "neutral")
+                summary = "Nessuna view configurata. Apri il Query Builder per creare la prima query."
+            elif active_views <= 0:
+                progress = 60
+                status, status_label, status_class = ("in_progress", "Bozza", "warning")
+                summary = (
+                    f"View presenti: {total_views}, ma nessuna attiva. "
+                    "Attiva almeno una view dal Query Builder."
+                )
+            else:
+                progress = 100
+                status, status_label, status_class = ("completed", "Completato", "success")
+                summary = f"View attive: {active_views} su {total_views}."
+
+            cards.append(
+                {
+                    **raw,
+                    "progress": progress,
+                    "status": status,
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "summary": summary,
+                    "route": str(raw.get("technical_route") or "/ui/views"),
+                    "action_label": "Apri Query Builder",
+                    "last_updated": _fmt_last_updated(last_view_update) or "n/d",
+                    "has_last_updated": bool(last_view_update),
+                    "steps_count": total_views,
+                    "completed_steps": active_views,
+                    "wizard_session_status": (
+                        WIZARD_STATUS_COMPLETED
+                        if status == "completed"
+                        else (WIZARD_STATUS_IN_PROGRESS if status == "in_progress" else WIZARD_STATUS_NOT_STARTED)
+                    ),
+                }
+            )
+            continue
+
         wizard_def = get_wizard_definition(wizard_id) or {}
         steps = _wizard_steps(wizard_def)
         steps_count = len(steps)
@@ -758,6 +953,17 @@ def _parse_sqlserver_conn_str(conn_str: str | None) -> dict[str, str | bool]:
         "encrypt": _to_bool_from_conn(kv.get("ENCRYPT"), default=False),
         "trust_server_certificate": _to_bool_from_conn(kv.get("TRUSTSERVERCERTIFICATE"), default=True),
     }
+
+
+def _split_sqlserver_server_token(server_raw: str | None) -> tuple[str, str, str]:
+    host = (server_raw or "").strip()
+    instance = ""
+    port = ""
+    if "\\" in host:
+        host, instance = host.split("\\", 1)
+    elif "," in host:
+        host, port = host.rsplit(",", 1)
+    return host.strip(), instance.strip(), port.strip()
 
 
 def _parse_hana_conn_str(conn_str: str | None) -> dict[str, str | bool]:
@@ -953,22 +1159,107 @@ def _render_overview(
         "views": db.query(func.count(ReportView.id)).scalar() or 0,
         "pipelines": db.query(func.count(Pipeline.id)).scalar() or 0,
         "schedules": db.query(func.count(Schedule.id)).scalar() or 0,
+        "schedules_active": db.query(func.count(Schedule.id)).filter(Schedule.is_active.is_(True)).scalar() or 0,
         "acl_rules": db.query(func.count(ACLRule.id)).scalar() or 0,
+        "acl_filter_rules": db.query(func.count(ACLFilterRule.id)).scalar() or 0,
         "run_logs": db.query(func.count(RunLog.id)).scalar() or 0,
     }
     recent_runs = db.query(RunLog).order_by(RunLog.id.desc()).limit(15).all()
+    last_run = recent_runs[0] if recent_runs else None
     pipelines = db.query(Pipeline).all()
     pipeline_by_id = {p.id: p for p in pipelines}
 
+    cards = _build_wizard_cards(request, db)
+    wizard_cards = [c for c in cards if str(c.get("id")) != "full"]
+    total_wizards = len(wizard_cards)
+    completed_wizards = sum(1 for c in wizard_cards if str(c.get("status")) == "completed")
+    attention_wizards = sum(
+        1
+        for c in wizard_cards
+        if str(c.get("status")) in {"test_failed", "waiting_external_action", "ready_to_confirm"}
+    )
+    in_progress_wizards = sum(1 for c in wizard_cards if str(c.get("status")) == "in_progress")
+    pending_wizards = sum(1 for c in wizard_cards if str(c.get("status")) == "not_configured")
+    completion_pct = int((completed_wizards / total_wizards) * 100) if total_wizards else 0
+    next_wizard = next((c for c in wizard_cards if str(c.get("status")) != "completed"), None)
+
+    source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower() or "sqlserver"
+    sql_conn = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default="").strip()
+    hana_conn = _load_setting(db, HANA_CONN_STR_SETTING_KEY, default="").strip()
+    bq_project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
+    bq_dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
+
+    sap_ok = bool(sql_conn) if source_db_engine != "hana" else bool(hana_conn)
+    bq_ok = bool(bq_project and bq_dataset)
+    scheduler_ok = stats["schedules_active"] > 0
+    looker_card = next((c for c in wizard_cards if str(c.get("id")) == "looker"), None)
+    looker_ok = bool(looker_card and str(looker_card.get("status")) == "completed")
+
+    system_checks = [
+        {
+            "label": "Connessione SAP B1",
+            "ok": sap_ok,
+            "value": "Configurata" if sap_ok else "Da configurare",
+            "status_class": "success" if sap_ok else "warning",
+            "route": "/ui/wizard/sap",
+        },
+        {
+            "label": "Connessione BigQuery",
+            "ok": bq_ok,
+            "value": "Configurata" if bq_ok else "Da configurare",
+            "status_class": "success" if bq_ok else "warning",
+            "route": "/ui/wizard/bigquery",
+        },
+        {
+            "label": "Scheduler",
+            "ok": scheduler_ok,
+            "value": f"{stats['schedules_active']} attive" if scheduler_ok else "Nessuna schedule attiva",
+            "status_class": "success" if scheduler_ok else "warning",
+            "route": "/ui/wizard/schedule",
+        },
+        {
+            "label": "Looker Studio",
+            "ok": looker_ok,
+            "value": "Setup completato" if looker_ok else "Configurazione incompleta",
+            "status_class": "success" if looker_ok else "warning",
+            "route": "/ui/wizard/looker",
+        },
+    ]
+    system_ok_count = sum(1 for row in system_checks if row["ok"])
+    system_ok_count = sum(1 for c in system_checks if c["ok"])
+
+    run_failures = 0
+    for row in recent_runs[:10]:
+        status_clean = str(row.status or "").strip().lower()
+        if status_clean not in {"ok", "success", "completed", "done"}:
+            run_failures += 1
+
+    alerts_open = attention_wizards + pending_wizards
+    if run_failures > 0:
+        alerts_open += 1
+
     return templates.TemplateResponse(
         request=request,
-        name="dashboard.html",
+        name="overview.html",
         context={
             "app_name": settings.app_name,
             "active_nav": active_nav,
             "stats": stats,
             "recent_runs": recent_runs,
             "pipeline_by_id": pipeline_by_id,
+            "wizard_cards": wizard_cards,
+            "total_wizards": total_wizards,
+            "completed_wizards": completed_wizards,
+            "attention_wizards": attention_wizards,
+            "in_progress_wizards": in_progress_wizards,
+            "pending_wizards": pending_wizards,
+            "completion_pct": completion_pct,
+            "next_wizard": next_wizard,
+            "last_run": last_run,
+            "run_failures": run_failures,
+            "system_checks": system_checks,
+            "system_ok_count": system_ok_count,
+            "alerts_open": alerts_open,
             "message": message,
             "error": error,
         },
@@ -1034,9 +1325,16 @@ def ui_wizard(
     error: str | None = Query(default=None),
     step: int | None = Query(default=None),
 ) -> HTMLResponse:
+    if wizard_id == "data":
+        return _redirect(
+            "/ui/views",
+            message="Per 'Dati da esportare' usa il Query Builder (pagina Views).",
+        )
+
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
+    row = _enrich_wizard_runtime_definition(wizard_id, row, db)
 
     steps_count = _wizard_step_count(row)
     if steps_count <= 0:
@@ -1082,6 +1380,14 @@ def ui_wizard(
 
     draft_data = read_draft_data(session_row)
     wizard_ctx = _wizard_render_context(wizard=row, step_index=current_step_index, draft_data=draft_data)
+    wizard_status, wizard_status_label, wizard_status_class = _wizard_status_display(
+        session_row.status,
+        int(wizard_ctx.get("progress", 0)),
+    )
+    card_display = dict(card)
+    card_display["status"] = wizard_status
+    card_display["status_label"] = wizard_status_label
+    card_display["status_class"] = wizard_status_class
 
     return templates.TemplateResponse(
         request=request,
@@ -1089,7 +1395,7 @@ def ui_wizard(
         context={
             "app_name": settings.app_name,
             "active_nav": "configurations",
-            "wizard": card,
+            "wizard": card_display,
             "wizard_meta": row,
             "technical_route": card["technical_route"],
             "draft_data": draft_data,
@@ -1107,9 +1413,16 @@ async def ui_wizard_action(
     request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
+    if wizard_id == "data":
+        return _redirect(
+            "/ui/views",
+            message="Per 'Dati da esportare' usa il Query Builder (pagina Views).",
+        )
+
     row = _wizard_definition_by_id(wizard_id)
     if row is None:
         return _redirect("/ui/configurations", error=f"Wizard '{wizard_id}' non riconosciuto.")
+    row = _enrich_wizard_runtime_definition(wizard_id, row, db)
 
     form = await request.form()
     action = str(form.get("action", "continue")).strip().lower()
@@ -1136,6 +1449,17 @@ async def ui_wizard_action(
         current_step_index = aligned_step_index
         current_step_id = _wizard_step_id_by_index(row, current_step_index)
         session_row = move_to_step(db, session_row, current_step_id)
+
+    # Evita conferme duplicate quando il wizard e gia completato.
+    if (
+        session_row.status == WIZARD_STATUS_COMPLETED
+        and action == "continue"
+        and current_step_index >= steps_count - 1
+    ):
+        return _redirect(
+            f"/ui/wizard/{wizard_id}",
+            message="Wizard gia completato.",
+        )
 
     current_step = steps[current_step_index]
 
@@ -1211,6 +1535,20 @@ async def ui_wizard_action(
                     f"/ui/wizard/{wizard_id}",
                     error=f"Conferma finale non completata: {exc}",
                 )
+        elif wizard_id == "sync":
+            try:
+                completion_message = _apply_sync_wizard_to_pipeline(db, session_row)
+            except ValueError as exc:
+                set_test_result(
+                    db,
+                    session_row,
+                    WIZARD_STATUS_TEST_FAILED,
+                    str(exc),
+                )
+                return _redirect(
+                    f"/ui/wizard/{wizard_id}",
+                    error=f"Conferma finale non completata: {exc}",
+                )
         mark_completed(db, session_row)
         return _redirect(
             f"/ui/wizard/{wizard_id}",
@@ -1249,21 +1587,159 @@ def ui_monitoring(
     message: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> HTMLResponse:
-    return _render_overview(
+    source_db_engine = _load_setting(db, SOURCE_DB_ENGINE_SETTING_KEY, default="sqlserver").strip().lower() or "sqlserver"
+    sql_conn = _load_setting(db, SQLSERVER_CONN_STR_SETTING_KEY, default="").strip()
+    hana_conn = _load_setting(db, HANA_CONN_STR_SETTING_KEY, default="").strip()
+    bq_project = _load_setting(db, BQ_PROJECT_ID_SETTING_KEY, default=settings.bq_project_id).strip()
+    bq_dataset = _load_setting(db, BQ_DATASET_SETTING_KEY, default=settings.bq_default_dataset).strip()
+
+    sap_ok = bool(sql_conn) if source_db_engine != "hana" else bool(hana_conn)
+    bq_ok = bool(bq_project and bq_dataset)
+    schedules_active = db.query(func.count(Schedule.id)).filter(Schedule.is_active.is_(True)).scalar() or 0
+    scheduler_ok = schedules_active > 0
+
+    cards = _build_wizard_cards(request, db)
+    wizard_cards = [c for c in cards if str(c.get("id")) != "full"]
+    looker_card = next((c for c in wizard_cards if str(c.get("id")) == "looker"), None)
+    looker_ok = bool(looker_card and str(looker_card.get("status")) == "completed")
+
+    recent_runs = db.query(RunLog).order_by(RunLog.id.desc()).limit(25).all()
+    pipelines = db.query(Pipeline).all()
+    pipeline_by_id = {p.id: p for p in pipelines}
+
+    run_status_totals: dict[str, int] = {}
+    run_failures = 0
+    for row in recent_runs:
+        key = str(row.status or "n/a").strip().lower() or "n/a"
+        run_status_totals[key] = run_status_totals.get(key, 0) + 1
+        if key not in {"ok", "success", "completed", "done"}:
+            run_failures += 1
+
+    alerts: list[dict[str, str]] = []
+    if not sap_ok:
+        alerts.append(
+            {
+                "title": "Connessione SAP non configurata",
+                "detail": "Completa il wizard SAP B1 per abilitare i run.",
+                "route": "/ui/wizard/sap",
+                "action": "Risolvi con wizard",
+            }
+        )
+    if not bq_ok:
+        alerts.append(
+            {
+                "title": "BigQuery non configurato",
+                "detail": "Mancano project/dataset o credenziali applicative.",
+                "route": "/ui/wizard/bigquery",
+                "action": "Risolvi con wizard",
+            }
+        )
+    if not scheduler_ok:
+        alerts.append(
+            {
+                "title": "Nessuna pianificazione attiva",
+                "detail": "Le pipeline non partiranno in automatico senza schedule attive.",
+                "route": "/ui/wizard/schedule",
+                "action": "Configura pianificazione",
+            }
+        )
+    if run_failures > 0:
+        alerts.append(
+            {
+                "title": "Esecuzioni con errore",
+                "detail": f"Ultimi run con stato non OK: {run_failures}.",
+                "route": "/ui/wizard/monitoring",
+                "action": "Risolvi con wizard",
+            }
+        )
+
+    system_checks = [
+        {
+            "label": "SAP B1",
+            "ok": sap_ok,
+            "status_label": "OK" if sap_ok else "Da verificare",
+            "status_class": "success" if sap_ok else "warning",
+        },
+        {
+            "label": "BigQuery",
+            "ok": bq_ok,
+            "status_label": "OK" if bq_ok else "Da verificare",
+            "status_class": "success" if bq_ok else "warning",
+        },
+        {
+            "label": "Scheduler",
+            "ok": scheduler_ok,
+            "status_label": "OK" if scheduler_ok else "Disattivato",
+            "status_class": "success" if scheduler_ok else "warning",
+        },
+        {
+            "label": "Looker Studio",
+            "ok": looker_ok,
+            "status_label": "OK" if looker_ok else "Da verificare",
+            "status_class": "success" if looker_ok else "warning",
+        },
+    ]
+
+    return templates.TemplateResponse(
         request=request,
-        db=db,
-        message=message,
-        error=error,
-        active_nav="monitoring",
+        name="monitoring.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "monitoring",
+            "recent_runs": recent_runs,
+            "pipeline_by_id": pipeline_by_id,
+            "run_status_totals": run_status_totals,
+            "run_failures": run_failures,
+            "alerts": alerts,
+            "system_checks": system_checks,
+            "system_ok_count": system_ok_count,
+            "message": message,
+            "error": error,
+        },
     )
 
 
-@router.get("/ui/users-access")
-def ui_users_access(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+@router.get("/ui/users-access", response_class=HTMLResponse)
+def ui_users_access(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
     user = _get_current_user(request, db)
-    if _is_admin(user):
-        return RedirectResponse(url="/ui/users", status_code=303)
-    return RedirectResponse(url="/ui/acl", status_code=303)
+    is_admin = _is_admin(user)
+
+    users_total = db.query(func.count(AppUser.id)).scalar() or 0
+    users_active = db.query(func.count(AppUser.id)).filter(AppUser.is_active.is_(True)).scalar() or 0
+    users_admin = db.query(func.count(AppUser.id)).filter(AppUser.role == ROLE_ADMIN).scalar() or 0
+    users_operator = db.query(func.count(AppUser.id)).filter(AppUser.role == ROLE_OPERATOR).scalar() or 0
+    users_viewer = db.query(func.count(AppUser.id)).filter(AppUser.role == ROLE_VIEWER).scalar() or 0
+
+    acl_legacy_total = db.query(func.count(ACLRule.id)).scalar() or 0
+    acl_legacy_active = db.query(func.count(ACLRule.id)).filter(ACLRule.is_active.is_(True)).scalar() or 0
+    acl_filter_total = db.query(func.count(ACLFilterRule.id)).scalar() or 0
+    acl_filter_active = db.query(func.count(ACLFilterRule.id)).filter(ACLFilterRule.is_active.is_(True)).scalar() or 0
+
+    return templates.TemplateResponse(
+        request=request,
+        name="users_access.html",
+        context={
+            "app_name": settings.app_name,
+            "active_nav": "users_access",
+            "is_admin": is_admin,
+            "users_total": users_total,
+            "users_active": users_active,
+            "users_admin": users_admin,
+            "users_operator": users_operator,
+            "users_viewer": users_viewer,
+            "acl_legacy_total": acl_legacy_total,
+            "acl_legacy_active": acl_legacy_active,
+            "acl_filter_total": acl_filter_total,
+            "acl_filter_active": acl_filter_active,
+            "message": message,
+            "error": error,
+        },
+    )
 
 
 @router.get("/ui/advanced", response_class=HTMLResponse)
