@@ -20,6 +20,8 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 AppSupportURL={#AppURL}
+SetupIconFile={#SourceRoot}\assets\esyy_b1connector.ico
+UninstallDisplayIcon={app}\assets\esyy_b1connector.ico
 DefaultDirName={autopf}\Esyy\B1Connector
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=no
@@ -55,13 +57,14 @@ Source: "{#SourceRoot}\setup_windows.ps1"; DestDir: "{app}"; Flags: ignoreversio
 Source: "{#SourceRoot}\install_autostart_task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\uninstall_autostart_task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceRoot}\install_client.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceRoot}\assets\esyy_b1connector.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Apri Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c start """" ""http://127.0.0.1:8010/login"""
-Name: "{group}\Riavvia Servizio Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c schtasks /End /TN EsyyB1Connector & schtasks /Run /TN EsyyB1Connector"
-Name: "{group}\Disinstalla avvio automatico"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_autostart_task.ps1"" -TaskName ""EsyyB1Connector"""
+Name: "{group}\Apri Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c start """" ""http://127.0.0.1:8010/login"""; IconFilename: "{app}\assets\esyy_b1connector.ico"
+Name: "{group}\Riavvia Servizio Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c schtasks /End /TN EsyyB1Connector & schtasks /Run /TN EsyyB1Connector"; IconFilename: "{app}\assets\esyy_b1connector.ico"
+Name: "{group}\Disinstalla avvio automatico"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_autostart_task.ps1"" -TaskName ""EsyyB1Connector"""; IconFilename: "{app}\assets\esyy_b1connector.ico"
 Name: "{group}\Disinstalla {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c start """" ""http://127.0.0.1:8010/login"""; Tasks: desktopicon
+Name: "{autodesktop}\Esyy B1Connector"; Filename: "{cmd}"; Parameters: "/c start """" ""http://127.0.0.1:8010/login"""; IconFilename: "{app}\assets\esyy_b1connector.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\setup_windows.ps1"" -InstallDeps -TaskName ""EsyyB1Connector"" -HostName 127.0.0.1 -Port 8010"; Flags: runhidden waituntilterminated

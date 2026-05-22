@@ -294,3 +294,15 @@ Durante il setup:
 - installa dipendenze
 - installa task scheduler `EsyyB1Connector` (SYSTEM o utente corrente)
 - apre il browser su `http://127.0.0.1:8010/login`
+
+### Personalizzazione icona Windows
+
+L'installer usa l'icona:
+
+- `installer\assets\esyy_b1connector.ico`
+
+Questa icona viene applicata a:
+
+- file `Setup.exe`
+- voce Programmi/Disinstalla (UninstallDisplayIcon)
+- collegamenti Start Menu e Desktop creati dal setup

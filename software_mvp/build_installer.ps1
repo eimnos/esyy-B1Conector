@@ -11,8 +11,11 @@ function Resolve-IsccPath {
   if ($cmd) { return $cmd.Source }
 
   $candidates = @(
+    "$env:LOCALAPPDATA\\Programs\\Inno Setup 6\\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-    "C:\Program Files\Inno Setup 6\ISCC.exe"
+    "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+    "C:\Program Files\Inno Setup 5\ISCC.exe"
   )
 
   foreach ($path in $candidates) {
@@ -56,7 +59,8 @@ $include = @(
   "setup_windows.ps1",
   "install_autostart_task.ps1",
   "uninstall_autostart_task.ps1",
-  "install_client.cmd"
+  "install_client.cmd",
+  "installer\\assets"
 )
 
 foreach ($item in $include) {
