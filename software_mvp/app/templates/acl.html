@@ -139,10 +139,10 @@
 </div>
 
 <div class="section">
-  <h2>Query Looker Studio generata (ACL generica)</h2>
+  <h2>Query Data Studio generata (ACL generica)</h2>
   <p class="muted">
-    Copia questa query nel data source BigQuery di Looker Studio (Query personalizzata).
-    Il parametro <code>@DS_USER_EMAIL</code> e disponibile in Looker Studio, non nella console SQL BigQuery.
+    Copia questa query nel data source BigQuery di Data Studio (Query personalizzata).
+    Il parametro <code>@DS_USER_EMAIL</code> e disponibile in Data Studio, non nella console SQL BigQuery.
   </p>
   {% if selected_view_row %}
     <p class="muted">Vista selezionata: <code>{{ selected_view_row.view_name }}</code></p>
@@ -163,7 +163,7 @@
         <div>
           <label class="field-label">
             User email
-            <span class="hint" title="Email dell'utente Looker Studio da autorizzare.">?</span>
+            <span class="hint" title="Email dell'utente Data Studio da autorizzare.">?</span>
           </label>
           <input type="email" name="user_email" required>
         </div>

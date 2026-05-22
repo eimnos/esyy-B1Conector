@@ -9,7 +9,7 @@ WIZARD_CARD_DEFINITIONS: list[dict[str, str]] = [
         "id": "full",
         "order": "00",
         "title": "Configurazione completa",
-        "description": "Percorso guidato end-to-end dalla sorgente SAP a Looker Studio.",
+        "description": "Percorso guidato end-to-end dalla sorgente SAP a Data Studio.",
         "icon_label": "FULL",
         "technical_route": "/ui/overview",
     },
@@ -64,7 +64,7 @@ WIZARD_CARD_DEFINITIONS: list[dict[str, str]] = [
     {
         "id": "looker",
         "order": "07",
-        "title": "Looker Studio",
+        "title": "Data Studio",
         "description": "Genera query sicure per la visualizzazione per utente.",
         "icon_label": "BI",
         "technical_route": "/ui/acl",
@@ -516,7 +516,7 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
     "access": {
         "id": "access",
         "title": "Wizard Accessi dati",
-        "subtitle": "Imposta ACL utente-campo per limitare la visibilita in Looker.",
+        "subtitle": "Imposta ACL utente-campo per limitare la visibilita in Data Studio.",
         "steps": [
             {
                 "id": "intro",
@@ -547,21 +547,21 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "looker": {
         "id": "looker",
-        "title": "Wizard Looker Studio",
+        "title": "Wizard Data Studio",
         "subtitle": "Prepara la query filtrata per utente e la pubblicazione report.",
         "steps": [
             {
                 "id": "intro",
                 "title": "Introduzione",
                 "type": "intro",
-                "question": "Configuriamo Looker Studio?",
+                "question": "Configuriamo Data Studio?",
                 "description": "Il wizard guida i prerequisiti per report sicuri.",
             },
             {
                 "id": "instruction",
                 "title": "Istruzioni operative",
                 "type": "instruction",
-                "question": "Passaggi da completare in Looker Studio.",
+                "question": "Passaggi da completare in Data Studio.",
                 "description": "Sequenza minima consigliata.",
                 "instructions": [
                     "Crea nuova sorgente dati BigQuery.",
@@ -574,8 +574,8 @@ WIZARD_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "id": "review",
                 "title": "Conferma",
                 "type": "review",
-                "question": "Confermi la checklist Looker?",
-                "description": "In caso di dubbi usa la guida ACL/Looker.",
+                "question": "Confermi la checklist Data Studio?",
+                "description": "In caso di dubbi usa la guida ACL/Data Studio.",
             },
         ],
     },

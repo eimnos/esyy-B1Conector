@@ -1,6 +1,8 @@
 :root {
   --ui-sidebar-bg: #0f1714;
   --ui-sidebar-soft: #17221d;
+  --ui-sidebar-collapsed-width: 74px;
+  --ui-sidebar-expanded-width: 280px;
   --ui-accent: #29493d;
   --ui-accent-strong: #1d352c;
   --ui-main-bg: #f4f6f5;
@@ -22,23 +24,40 @@ body {
 }
 
 .app-sidebar {
-  width: 280px;
+  width: var(--ui-sidebar-collapsed-width);
   flex-shrink: 0;
   background: linear-gradient(180deg, var(--ui-sidebar-bg) 0%, #0b120f 100%);
   color: #f8fafc;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.app-sidebar:hover,
+.app-sidebar:focus-within {
+  width: var(--ui-sidebar-expanded-width);
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 18px 18px 14px;
+  justify-content: center;
+  gap: 0;
+  padding: 14px 8px 12px;
   color: #f8fafc;
   text-decoration: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  transition: padding 0.2s ease, gap 0.2s ease, justify-content 0.2s ease;
+}
+
+.app-sidebar:hover .sidebar-brand,
+.app-sidebar:focus-within .sidebar-brand {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 18px 18px 14px;
 }
 
 .sidebar-brand:hover {
@@ -54,6 +73,21 @@ body {
 .sidebar-brand-text {
   display: grid;
   gap: 2px;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
+  transition: opacity 0.16s ease, width 0.2s ease, transform 0.2s ease;
+}
+
+.app-sidebar:hover .sidebar-brand-text,
+.app-sidebar:focus-within .sidebar-brand-text {
+  opacity: 1;
+  width: auto;
+  overflow: visible;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .sidebar-kicker {
@@ -79,15 +113,23 @@ body {
 .sidebar-link {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 10px 10px;
+  justify-content: center;
+  gap: 0;
+  padding: 10px 8px;
   border-radius: 6px;
   border: 1px solid transparent;
   color: rgba(248, 250, 252, 0.9);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, padding 0.2s ease, gap 0.2s ease, justify-content 0.2s ease;
+}
+
+.app-sidebar:hover .sidebar-link,
+.app-sidebar:focus-within .sidebar-link {
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 10px 10px;
 }
 
 .sidebar-link:hover {
@@ -109,14 +151,45 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-link span {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateX(-6px);
+  white-space: nowrap;
+  transition: opacity 0.16s ease, width 0.2s ease, transform 0.2s ease;
+}
+
+.app-sidebar:hover .sidebar-link span,
+.app-sidebar:focus-within .sidebar-link span {
+  opacity: 1;
+  width: auto;
+  overflow: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
 .sidebar-meta {
   margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px 14px 16px;
+  padding: 0;
   font-size: 11px;
   display: grid;
   gap: 5px;
   color: rgba(248, 250, 252, 0.78);
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.16s ease, max-height 0.2s ease, padding 0.2s ease;
+}
+
+.app-sidebar:hover .sidebar-meta,
+.app-sidebar:focus-within .sidebar-meta {
+  opacity: 1;
+  max-height: 120px;
+  padding: 14px 14px 16px;
+  overflow: visible;
 }
 
 .sidebar-meta strong {
@@ -647,13 +720,59 @@ body {
     width: 100%;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: visible;
+  }
+
+  .app-sidebar:hover,
+  .app-sidebar:focus-within {
+    width: 100%;
   }
 
   .sidebar-nav {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 
+  .sidebar-brand,
+  .app-sidebar:hover .sidebar-brand,
+  .app-sidebar:focus-within .sidebar-brand {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 18px 18px 14px;
+  }
+
+  .sidebar-brand-text,
+  .app-sidebar:hover .sidebar-brand-text,
+  .app-sidebar:focus-within .sidebar-brand-text {
+    opacity: 1;
+    width: auto;
+    overflow: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .sidebar-link,
+  .app-sidebar:hover .sidebar-link,
+  .app-sidebar:focus-within .sidebar-link {
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 10px 10px;
+  }
+
+  .sidebar-link span,
+  .app-sidebar:hover .sidebar-link span,
+  .app-sidebar:focus-within .sidebar-link span {
+    opacity: 1;
+    width: auto;
+    overflow: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
   .sidebar-meta {
+    opacity: 1;
+    max-height: none;
+    overflow: visible;
+    padding: 14px 14px 16px;
     margin-top: 0;
   }
 }
